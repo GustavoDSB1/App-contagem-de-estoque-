@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Tampa da caixa -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,34h48a4,4 0,0 1,4 4v6a4,4 0,0 1,-4 4h-48a4,4 0,0 1,-4 -4v-6a4,4 0,0 1,4 -4z" />
+    <!-- Corpo da caixa -->
+    <path
+        android:fillColor="#E0E7FF"
+        android:pathData="M31,51h46v25a4,4 0,0 1,-4 4h-38a4,4 0,0 1,-4 -4z" />
+    <!-- Marca de conferido -->
+    <path
+        android:pathData="M43,65l8,7l14,-14"
+        android:strokeWidth="5"
+        android:strokeColor="#16A34A"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

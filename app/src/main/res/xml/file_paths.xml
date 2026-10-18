@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pastas que o app pode compartilhar com outros apps (WhatsApp, Drive, câmera...).
+     Toda pasta usada com FileProvider precisa estar aqui. -->
+<paths>
+    <cache-path name="planilhas" path="planilhas/" />
+    <cache-path name="camera" path="camera/" />
+    <cache-path name="backup" path="backup/" />
+</paths>

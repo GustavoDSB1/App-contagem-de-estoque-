@@ -1,0 +1,14 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# Chave de assinatura do APK: nunca no repositório (fica no Secret KEYSTORE_BASE64)
+*.keystore
+*.jks
