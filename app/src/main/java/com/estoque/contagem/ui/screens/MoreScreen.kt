@@ -21,6 +21,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.Switch
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
@@ -54,7 +57,10 @@ import androidx.compose.ui.unit.sp
 import com.estoque.contagem.data.CompanySettings
 import com.estoque.contagem.data.Person
 import com.estoque.contagem.data.PhotoChange
+import com.estoque.contagem.consumo.MessageTemplate
 import com.estoque.contagem.ui.components.CompanyDialog
+import com.estoque.contagem.ui.components.GroupDialog
+import com.estoque.contagem.ui.components.MessageTemplateDialog
 import com.estoque.contagem.ui.components.CompanyLogoBox
 import com.estoque.contagem.ui.components.rememberProductImage
 import com.estoque.contagem.data.PersonType
@@ -86,9 +92,18 @@ fun MoreScreen(
     onImportBackup: () -> Unit,
     onImportSpreadsheet: () -> Unit,
     onSetExcludedFromExcel: (Set<String>) -> Unit,
-    onSaveCompany: (name: String, document: String, logo: PhotoChange) -> Unit
+    onSaveCompany: (name: String, document: String, logo: PhotoChange) -> Unit,
+    onSetConsumptionEnabled: (Boolean) -> Unit = {},
+    onAddGroup: (label: String, emoji: String) -> Boolean = { _, _ -> false },
+    onEditGroup: (id: String, label: String, emoji: String) -> Boolean = { _, _, _ -> false },
+    onDeleteGroup: (PersonType) -> Unit = {},
+    onSaveMessageTemplate: (MessageTemplate) -> Unit = {}
 ) {
     var editingCompany by remember { mutableStateOf(false) }
+    var editingGroup by remember { mutableStateOf<PersonType?>(null) }
+    var creatingGroup by remember { mutableStateOf(false) }
+    var deletingGroup by remember { mutableStateOf<PersonType?>(null) }
+    var editingMessage by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf<PersonType?>(null) }
     var choosingExcluded by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<Person?>(null) }
@@ -126,13 +141,62 @@ fun MoreScreen(
             ) {
                 CompanyCard(company = state.company, onEdit = { editingCompany = true })
 
-                PersonType.entries.forEach { type ->
-                    PeopleCard(
-                        type = type,
-                        people = state.people.filter { it.type == type }.sortedBy { it.name.lowercase() },
-                        onAdd = { adding = type },
-                        onDelete = { deleting = it }
-                    )
+                // ----- Aba Consumo: liga/desliga, grupos de pessoas e mensagem -----
+                SectionCard(
+                    emoji = "🧾",
+                    title = "Aba Consumo",
+                    text = "Baixa do que funcionários, diaristas ou clientes consumiram, com mensagem pronta " +
+                        "para o WhatsApp. Não altera o estoque."
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { onSetConsumptionEnabled(!state.settings.consumptionEnabled) }
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Text(
+                            if (state.settings.consumptionEnabled) "Aba Consumo ligada" else "Aba Consumo desligada",
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(
+                            checked = state.settings.consumptionEnabled,
+                            onCheckedChange = onSetConsumptionEnabled
+                        )
+                    }
+                    if (state.settings.consumptionEnabled) {
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { editingMessage = true },
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                        ) { Text("💬 Editar mensagem do WhatsApp", fontWeight = FontWeight.Bold) }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { creatingGroup = true },
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                        ) { Text("👥 Novo grupo de pessoas", fontWeight = FontWeight.Bold) }
+                    }
+                }
+
+                if (state.settings.consumptionEnabled) {
+                    state.groups.forEach { type ->
+                        PeopleCard(
+                            type = type,
+                            people = state.people.filter { it.typeId == type.id }.sortedBy { it.name.lowercase() },
+                            onAdd = { adding = type },
+                            onDelete = { deleting = it },
+                            onEditGroup = { editingGroup = type },
+                            onDeleteGroup = if (state.groups.size > 1) ({ deletingGroup = type }) else null
+                        )
+                    }
                 }
 
                 val excluded = state.products.filter { it.excludeFromExcel }
@@ -253,11 +317,52 @@ fun MoreScreen(
         )
     }
 
+    if (creatingGroup || editingGroup != null) {
+        val group = editingGroup
+        GroupDialog(
+            initial = group,
+            onDismiss = { creatingGroup = false; editingGroup = null },
+            onSave = { label, emoji ->
+                val ok = if (group == null) onAddGroup(label, emoji) else onEditGroup(group.id, label, emoji)
+                if (ok) {
+                    creatingGroup = false
+                    editingGroup = null
+                }
+                ok
+            }
+        )
+    }
+
+    deletingGroup?.let { group ->
+        val count = state.people.count { it.typeId == group.id }
+        ConfirmDialog(
+            emoji = "🗑️",
+            title = "Apagar o grupo \"${group.label}\"?",
+            message = (if (count > 0) "As $count pessoa(s) desse grupo saem da lista. " else "") +
+                "As baixas já feitas continuam salvas.",
+            confirmText = "Apagar grupo",
+            confirmColor = DangerRed,
+            onConfirm = { onDeleteGroup(group); deletingGroup = null },
+            onDismiss = { deletingGroup = null }
+        )
+    }
+
+    if (editingMessage) {
+        MessageTemplateDialog(
+            initial = state.settings.messageTemplate,
+            sampleType = state.groups.firstOrNull() ?: PersonType.EMPLOYEE,
+            companyName = state.company.name,
+            onDismiss = { editingMessage = false },
+            onSave = { onSaveMessageTemplate(it); editingMessage = false }
+        )
+    }
+
     deleting?.let { person ->
         ConfirmDialog(
             emoji = "🗑️",
             title = "Remover ${person.name}?",
-            message = "Sai da lista de ${person.type.label}s. As baixas já feitas continuam salvas.",
+            message = "Sai da lista de ${PersonType.resolve(state.groups, person.typeId).label}. " +
+                "As baixas já feitas continuam salvas.",
             confirmText = "Remover",
             confirmColor = DangerRed,
             onConfirm = { onDeletePerson(person); deleting = null },
@@ -346,9 +451,12 @@ private fun PeopleCard(
     type: PersonType,
     people: List<Person>,
     onAdd: () -> Unit,
-    onDelete: (Person) -> Unit
+    onDelete: (Person) -> Unit,
+    onEditGroup: () -> Unit = {},
+    /** null = não pode apagar (é o único grupo). */
+    onDeleteGroup: (() -> Unit)? = null
 ) {
-    val title = if (type == PersonType.EMPLOYEE) "Funcionários" else "Diaristas"
+    val title = type.label.replaceFirstChar { it.uppercase() }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -361,15 +469,22 @@ private fun PeopleCard(
                 "${type.emoji} $title (${people.size})",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = onEditGroup)
             )
-            Button(
-                onClick = onAdd,
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Indigo)
-            ) { Text("➕ Cadastrar", fontWeight = FontWeight.Bold) }
+            IconButton(onClick = onEditGroup) {
+                Icon(Icons.Filled.Edit, contentDescription = "Editar grupo", tint = TextSecondary)
+            }
+            if (onDeleteGroup != null) {
+                IconButton(onClick = onDeleteGroup) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Apagar grupo", tint = DangerRed.copy(alpha = 0.7f))
+                }
+            }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
         if (people.isEmpty()) {
             Text("Ninguém cadastrado ainda.", color = TextSecondary)
         }
@@ -400,6 +515,13 @@ private fun PeopleCard(
                 }
             }
         }
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = onAdd,
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Indigo),
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("➕ Cadastrar $title".let { if (it.length > 32) "➕ Cadastrar pessoa" else it }, fontWeight = FontWeight.Bold) }
     }
 }
 

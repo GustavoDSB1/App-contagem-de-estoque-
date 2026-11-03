@@ -83,7 +83,7 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
     val snackbar = remember { SnackbarHostState() }
     val clipboard = LocalClipboardManager.current
 
-    var tab by rememberSaveable { mutableStateOf(0) }
+    var tab by rememberSaveable { mutableStateOf("estoque") }
     // Mantém a posição da lista, a busca e os filtros enquanto um produto está aberto
     // ou enquanto a outra aba está na tela.
     val screenStates = rememberSaveableStateHolder()
@@ -137,6 +137,8 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
     }
 
     val openProduct = state.products.firstOrNull { it.id == openProductId }
+    // Se a aba Consumo foi desligada enquanto estava aberta, volta para o Estoque
+    val currentTab = if (tab == "consumo" && !state.settings.consumptionEnabled) "estoque" else tab
 
     AnimatedContent(
         targetState = openProduct?.id,
@@ -178,10 +180,14 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 bottomBar = {
                     NavigationBar(containerColor = Color.White) {
-                        listOf("📦" to "Estoque", "🧾" to "Consumo", "⚙️" to "Mais").forEachIndexed { i, (emoji, label) ->
+                        // A aba Consumo some quando é desligada em ⚙️ Mais
+                        val tabs = listOf(Triple("estoque", "📦", "Estoque")) +
+                            (if (state.settings.consumptionEnabled) listOf(Triple("consumo", "🧾", "Consumo")) else emptyList()) +
+                            listOf(Triple("mais", "⚙️", "Mais"))
+                        tabs.forEach { (key, emoji, label) ->
                             NavigationBarItem(
-                                selected = tab == i,
-                                onClick = { tab = i },
+                                selected = currentTab == key,
+                                onClick = { tab = key },
                                 icon = { Text(emoji, fontSize = 22.sp) },
                                 label = { Text(label, fontWeight = FontWeight.SemiBold) },
                                 colors = NavigationBarItemDefaults.colors(
@@ -199,7 +205,7 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
                         .padding(padding)
                         .consumeWindowInsets(padding)
                 ) {
-                    if (tab == 0) screenStates.SaveableStateProvider("estoque") {
+                    if (currentTab == "estoque") screenStates.SaveableStateProvider("estoque") {
                         HomeScreen(
                             state = state,
                             snackbarHostState = snackbar,
@@ -227,7 +233,7 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
                                 notify("🔄 Nova contagem iniciada!")
                             }
                         )
-                    } else if (tab == 1) screenStates.SaveableStateProvider("consumo") {
+                    } else if (currentTab == "consumo") screenStates.SaveableStateProvider("consumo") {
                         ConsumptionScreen(
                             state = state,
                             snackbarHostState = snackbar,
@@ -272,6 +278,14 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
                             onSaveCompany = { name, document, logo ->
                                 vm.updateCompany(name, document, logo)
                                 notify("✅ Dados da empresa salvos")
+                            },
+                            onSetConsumptionEnabled = { vm.setConsumptionEnabled(it) },
+                            onAddGroup = { label, emoji -> vm.addGroup(label, emoji) },
+                            onEditGroup = { id, label, emoji -> vm.editGroup(id, label, emoji) },
+                            onDeleteGroup = { vm.deleteGroup(it.id) },
+                            onSaveMessageTemplate = {
+                                vm.setMessageTemplate(it)
+                                notify("✅ Mensagem salva")
                             }
                         )
                     }

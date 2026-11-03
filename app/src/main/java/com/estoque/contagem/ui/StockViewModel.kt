@@ -6,6 +6,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.estoque.contagem.data.Consumption
 import com.estoque.contagem.data.CountEntry
+import com.estoque.contagem.consumo.AppSettings
+import com.estoque.contagem.consumo.MessageTemplate
 import com.estoque.contagem.data.BackupCompany
 import com.estoque.contagem.data.Barcodes
 import com.estoque.contagem.data.BackupData
@@ -50,6 +52,8 @@ data class UiState(
     val consumptions: List<Consumption> = emptyList(),
     val people: List<Person> = emptyList(),
     val company: CompanySettings = CompanySettings(),
+    val groups: List<PersonType> = PersonType.DEFAULTS,
+    val settings: AppSettings = AppSettings(),
     val loaded: Boolean = false
 ) {
     val totalItems: Double get() = Qty.round(products.sumOf { it.quantity })
@@ -93,14 +97,15 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val data = withContext(Dispatchers.IO) { repository.load() }
             _state.value = UiState(
-                data.products, data.countStartedAt, data.consumptions, data.people, data.company, loaded = true
+                data.products, data.countStartedAt, data.consumptions, data.people, data.company,
+                data.groups, data.settings, loaded = true
             )
             // Primeira vez com o cadastro de pessoas: aproveita os nomes já usados nas baixas
             if (data.people.isEmpty() && data.consumptions.isNotEmpty()) {
                 val seeded = data.consumptions
                     .sortedBy { it.timestamp }
-                    .distinctBy { it.personType to it.personName.trim().lowercase() }
-                    .map { Person(UUID.randomUUID().toString(), it.personName.trim(), it.personType) }
+                    .distinctBy { it.personTypeId to it.personName.trim().lowercase() }
+                    .map { Person(UUID.randomUUID().toString(), it.personName.trim(), it.personTypeId) }
                 update { it.copy(people = seeded) }
             }
         }
@@ -112,7 +117,10 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
             saveMutex.withLock {
                 val latest = _state.value
                 repository.save(
-                    StockData(latest.products, latest.countStartedAt, latest.consumptions, latest.people, latest.company)
+                    StockData(
+                        latest.products, latest.countStartedAt, latest.consumptions, latest.people, latest.company,
+                        latest.groups, latest.settings
+                    )
                 )
             }
         }
@@ -235,7 +243,7 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
         val entry = Consumption(
             id = UUID.randomUUID().toString(),
             personName = name,
-            personType = type,
+            personTypeId = type.id,
             productId = product.id,
             productName = product.name,
             quantity = quantity,
@@ -326,9 +334,47 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
     fun addPerson(name: String, type: PersonType): Boolean {
         val clean = name.trim().replace(Regex("\\s+"), " ").take(40)
         if (clean.isEmpty()) return false
-        if (_state.value.people.any { it.type == type && it.name.equals(clean, ignoreCase = true) }) return false
-        update { it.copy(people = it.people + Person(UUID.randomUUID().toString(), clean, type)) }
+        if (_state.value.people.any { it.typeId == type.id && it.name.equals(clean, ignoreCase = true) }) return false
+        update { it.copy(people = it.people + Person(UUID.randomUUID().toString(), clean, type.id)) }
         return true
+    }
+
+    // ---------- Grupos de pessoas e configurações do Consumo ----------
+
+    /** Cria um grupo (ex.: "cliente"). Retorna false se o nome estiver vazio ou repetido. */
+    fun addGroup(label: String, emoji: String): Boolean {
+        val clean = label.trim().replace(Regex("\\s+"), " ").take(30)
+        if (clean.isEmpty() || _state.value.groups.any { it.label.equals(clean, ignoreCase = true) }) return false
+        update { it.copy(groups = it.groups + PersonType(UUID.randomUUID().toString(), clean, emoji)) }
+        return true
+    }
+
+    fun editGroup(id: String, label: String, emoji: String): Boolean {
+        val clean = label.trim().replace(Regex("\\s+"), " ").take(30)
+        if (clean.isEmpty() || _state.value.groups.any { it.id != id && it.label.equals(clean, ignoreCase = true) }) {
+            return false
+        }
+        update { s -> s.copy(groups = s.groups.map { if (it.id == id) it.copy(label = clean, emoji = emoji) else it }) }
+        return true
+    }
+
+    /** Apaga o grupo e as pessoas dele (as baixas já feitas continuam salvas). Sempre sobra pelo menos um. */
+    fun deleteGroup(id: String) {
+        if (_state.value.groups.size <= 1) return
+        update { s ->
+            s.copy(
+                groups = s.groups.filterNot { it.id == id },
+                people = s.people.filterNot { it.typeId == id }
+            )
+        }
+    }
+
+    fun setConsumptionEnabled(enabled: Boolean) {
+        update { it.copy(settings = it.settings.copy(consumptionEnabled = enabled)) }
+    }
+
+    fun setMessageTemplate(template: MessageTemplate) {
+        update { it.copy(settings = it.settings.copy(messageTemplate = template)) }
     }
 
     fun deletePerson(id: String) {
@@ -352,7 +398,9 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                                 p.barcode
                             )
                         },
-                        people = snapshot.people.map { BackupPerson(it.name, it.type) },
+                        people = snapshot.people.map { BackupPerson(it.name, it.typeId) },
+                        groups = snapshot.groups,
+                        messageTemplate = snapshot.settings.messageTemplate,
                         createdAt = now,
                         company = snapshot.company.takeUnless { it.isEmpty }?.let { c ->
                             BackupCompany(c.name, c.document, ProductImages.readJpeg(app, c.logoFile))
@@ -400,7 +448,7 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                         p != null && b.priceCents > 0 && b.priceCents != p.priceCents
                     },
                     newPeople = data.people.count { b ->
-                        s.people.none { it.type == b.type && it.name.equals(b.name, ignoreCase = true) }
+                        s.people.none { it.typeId == b.typeId && it.name.equals(b.name, ignoreCase = true) }
                     }
                 )
             })
@@ -469,12 +517,20 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 val newPeople = mutableListOf<Person>()
                 data.people.forEach { b ->
-                    val exists = (s.people + newPeople).any { it.type == b.type && it.name.equals(b.name, ignoreCase = true) }
-                    if (!exists) newPeople += Person(UUID.randomUUID().toString(), b.name, b.type)
+                    val exists = (s.people + newPeople).any { it.typeId == b.typeId && it.name.equals(b.name, ignoreCase = true) }
+                    if (!exists) newPeople += Person(UUID.randomUUID().toString(), b.name, b.typeId)
                 }
                 s.copy(
                     products = s.products.map { updatedIds[it.id] ?: it } + added,
                     people = s.people + newPeople,
+                    // Grupos que este celular ainda não tem (pelo id)
+                    groups = s.groups + data.groups.filter { g -> s.groups.none { it.id == g.id } },
+                    // Mensagem do backup só substitui se aqui ainda estiver a padrão
+                    settings = if (data.messageTemplate != null && s.settings.messageTemplate == MessageTemplate.DEFAULT) {
+                        s.settings.copy(messageTemplate = data.messageTemplate)
+                    } else {
+                        s.settings
+                    },
                     company = if (backupCompany != null && s.company.isEmpty) {
                         CompanySettings(backupCompany.name, backupCompany.document, companyLogo)
                     } else {

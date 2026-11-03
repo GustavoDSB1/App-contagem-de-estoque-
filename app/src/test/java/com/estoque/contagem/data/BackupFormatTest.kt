@@ -19,7 +19,9 @@ class BackupFormatTest {
                 ),
                 BackupProduct("Pipoca \"doce\"", "🍬", 2, 1500, null)
             ),
-            people = listOf(BackupPerson("Ricardo", PersonType.EMPLOYEE), BackupPerson("Andressa", PersonType.DAY_WORKER)),
+            people = listOf(BackupPerson("Ricardo", PersonType.EMPLOYEE.id), BackupPerson("Andressa", "g1")),
+            groups = listOf(PersonType.EMPLOYEE, PersonType("g1", "cliente", "🛒")),
+            messageTemplate = com.estoque.contagem.consumo.MessageTemplate(footer = "Total: {total}"),
             createdAt = 123L,
             company = BackupCompany("Mercadinho Bom Preço", "12.345.678/0001-90", byteArrayOf(9, 8, 7))
         )
@@ -38,9 +40,22 @@ class BackupFormatTest {
         assertNull(decoded.products[1].photoJpeg)
         assertEquals(original.people, decoded.people)
         assertEquals(123L, decoded.createdAt)
+        assertEquals(listOf("EMPLOYEE", "g1"), decoded.groups.map { it.id })
+        assertEquals("cliente", decoded.groups[1].label)
+        assertEquals("Total: {total}", decoded.messageTemplate?.footer)
         assertEquals("Mercadinho Bom Preço", decoded.company?.name)
         assertEquals("12.345.678/0001-90", decoded.company?.document)
         assertArrayEquals(byteArrayOf(9, 8, 7), decoded.company?.logoPng)
+    }
+
+    @Test
+    fun oldBackupWithoutGroupsGetsDefaults() {
+        val old = "{\"tipo\":\"contagem-estoque-backup\",\"versao\":1,\"produtos\":[]," +
+            "\"pessoas\":[{\"nome\":\"Ana\",\"tipo\":\"DAY_WORKER\"}]}"
+        val decoded = BackupFormat.decode(old)
+        assertEquals(PersonType.DEFAULTS, decoded.groups)
+        assertEquals("DAY_WORKER", decoded.people.single().typeId)
+        assertNull(decoded.messageTemplate)
     }
 
     @Test

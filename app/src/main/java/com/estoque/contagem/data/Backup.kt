@@ -1,5 +1,6 @@
 package com.estoque.contagem.data
 
+import com.estoque.contagem.consumo.MessageTemplate
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Base64
@@ -18,7 +19,8 @@ data class BackupProduct(
     val barcode: String = ""
 )
 
-data class BackupPerson(val name: String, val type: PersonType)
+/** [typeId] é o id do grupo ([PersonType.id]). */
+data class BackupPerson(val name: String, val typeId: String)
 
 data class BackupCompany(
     val name: String,
@@ -31,7 +33,11 @@ data class BackupData(
     val products: List<BackupProduct>,
     val people: List<BackupPerson>,
     val createdAt: Long,
-    val company: BackupCompany? = null
+    val company: BackupCompany? = null,
+    /** Grupos de pessoas (funcionário, diarista...). */
+    val groups: List<PersonType> = emptyList(),
+    /** Modelo da mensagem do WhatsApp (null = não incluído). */
+    val messageTemplate: MessageTemplate? = null
 )
 
 class BackupException(message: String) : Exception(message)
@@ -64,7 +70,7 @@ object BackupFormat {
         }
         val people = JSONArray()
         data.people.forEach { person ->
-            people.put(JSONObject().put("nome", person.name).put("tipo", person.type.name))
+            people.put(JSONObject().put("nome", person.name).put("tipo", person.typeId))
         }
         val json = JSONObject()
             .put("tipo", KIND)
@@ -72,6 +78,10 @@ object BackupFormat {
             .put("criadoEm", data.createdAt)
             .put("produtos", products)
             .put("pessoas", people)
+            .put("grupos", JSONArray().apply {
+                data.groups.forEach { g -> put(JSONObject().put("id", g.id).put("nome", g.label).put("emoji", g.emoji)) }
+            })
+        data.messageTemplate?.let { json.put("mensagem", it.toJson()) }
         data.company?.let { c ->
             json.put(
                 "empresa",
@@ -114,9 +124,18 @@ object BackupFormat {
         val people = (0 until peopleArr.length()).mapNotNull { i ->
             val o = peopleArr.optJSONObject(i) ?: return@mapNotNull null
             val name = o.optString("nome").trim().take(40)
-            val type = PersonType.entries.firstOrNull { it.name == o.optString("tipo") }
-            if (name.isEmpty() || type == null) null else BackupPerson(name, type)
+            val typeId = o.optString("tipo").trim()
+            if (name.isEmpty() || typeId.isEmpty()) null else BackupPerson(name, typeId)
         }
+        // Backups antigos não têm grupos: usa os padrões (funcionário e diarista)
+        val groupsArr = json.optJSONArray("grupos")
+        val groups = if (groupsArr == null) PersonType.DEFAULTS else (0 until groupsArr.length()).mapNotNull { i ->
+            val o = groupsArr.optJSONObject(i) ?: return@mapNotNull null
+            val id = o.optString("id").trim()
+            val label = o.optString("nome").trim().take(30)
+            if (id.isEmpty() || label.isEmpty()) null else PersonType(id, label, o.optString("emoji").ifBlank { "👤" })
+        }
+        val template = json.optJSONObject("mensagem")?.let { MessageTemplate.fromJson(it) }
         val company = json.optJSONObject("empresa")?.let { o ->
             BackupCompany(
                 name = o.optString("nome").trim().take(60),
@@ -125,6 +144,6 @@ object BackupFormat {
                 else runCatching { Base64.getDecoder().decode(o.getString("logo")) }.getOrNull()
             )
         }
-        return BackupData(products, people, json.optLong("criadoEm", 0), company)
+        return BackupData(products, people, json.optLong("criadoEm", 0), company, groups, template)
     }
 }

@@ -46,6 +46,9 @@ Aplicativo Android simples e visual para contar estoque e gerar uma planilha Exc
 
      Leonardo 1 guaraná lata 7,00
      ```
+- **Consumo configurável** (em ⚙️ Mais): ligar/desligar a aba Consumo, criar grupos de pessoas
+  (funcionário, diarista, cliente, mesa...) e editar a mensagem do WhatsApp com campos
+  `{tipo} {data} {empresa} {total}` / `{nome} {qtd} {produto} {valor} {unitario}`, com prévia.
 - **Aba ⚙️ Mais**:
   - **🏢 Sua empresa**: nome, CNPJ/CPF e logo, que aparecem no topo do app e no cabeçalho da planilha
     (o logo vai embutido no arquivo Excel).

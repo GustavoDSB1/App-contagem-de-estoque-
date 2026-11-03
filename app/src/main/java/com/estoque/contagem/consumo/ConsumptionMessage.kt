@@ -40,7 +40,7 @@ object Days {
 }
 
 /**
- * Monta a mensagem para o WhatsApp, no modelo:
+ * Monta a mensagem para o WhatsApp a partir do [MessageTemplate]. Com o modelo padrão:
  *
  * Consumo funcionário 02/10
  * Ricardo 1 coca 600 9,00
@@ -49,18 +49,53 @@ object Days {
  */
 object ConsumptionMessage {
 
-    fun build(type: PersonType, dayMillis: Long, entries: List<Consumption>): String {
-        val sb = StringBuilder("Consumo ${type.label} ${Days.shortDate(dayMillis)}")
+    fun build(
+        type: PersonType,
+        dayMillis: Long,
+        entries: List<Consumption>,
+        template: MessageTemplate = MessageTemplate.DEFAULT,
+        companyName: String = ""
+    ): String {
+        val total = entries.sumOf { it.totalCents }
+        val common = mapOf(
+            "{tipo}" to type.label,
+            "{data}" to Days.shortDate(dayMillis),
+            "{empresa}" to companyName.trim(),
+            "{total}" to Money.format(total)
+        )
+        val lines = mutableListOf<String>()
+        fill(template.header, common).takeIf { it.isNotEmpty() }?.let { lines += it }
+
         val byPerson = entries
             .sortedBy { it.timestamp }
             .groupBy { it.personName.trim().lowercase(BR) }
         byPerson.values.forEachIndexed { i, list ->
-            sb.append(if (i == 0) "\n" else "\n\n")
-            sb.append(list.joinToString("\n") { line(it) })
+            if (i > 0 && template.blankLineBetweenPeople) lines += ""
+            list.forEach { lines += line(it, template) }
         }
-        return sb.toString()
+
+        fill(template.footer, common).takeIf { it.isNotEmpty() }?.let {
+            lines += ""
+            lines += it
+        }
+        return lines.joinToString("\n")
     }
 
-    fun line(e: Consumption): String =
-        "${e.personName.trim()} ${e.quantity} ${e.productName.trim()} ${Money.format(e.totalCents)}"
+    fun line(e: Consumption, template: MessageTemplate = MessageTemplate.DEFAULT): String = fill(
+        template.line,
+        mapOf(
+            "{nome}" to e.personName.trim(),
+            "{qtd}" to e.quantity.toString(),
+            "{produto}" to e.productName.trim(),
+            "{valor}" to Money.format(e.totalCents),
+            "{unitario}" to Money.format(e.unitPriceCents)
+        )
+    )
+
+    /** Troca os campos pelo valor e tira espaços sobrando (ex.: campo vazio no meio). */
+    private fun fill(text: String, values: Map<String, String>): String {
+        var out = text
+        values.forEach { (key, value) -> out = out.replace(key, value, ignoreCase = true) }
+        return out.replace(Regex("[ \\t]+"), " ").trim()
+    }
 }

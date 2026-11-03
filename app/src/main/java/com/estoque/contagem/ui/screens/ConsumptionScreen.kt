@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
@@ -114,8 +116,13 @@ fun ConsumptionScreen(
 ) {
     val context = LocalContext.current
     val today = Days.startOfDay(System.currentTimeMillis())
-    var typeName by rememberSaveable { mutableStateOf(PersonType.EMPLOYEE.name) }
-    val type = PersonType.valueOf(typeName)
+    val groups = state.groups
+    var typeId by rememberSaveable { mutableStateOf(PersonType.EMPLOYEE.id) }
+    val type = groups.firstOrNull { it.id == typeId } ?: groups.first()
+    val template = state.settings.messageTemplate
+    val companyName = state.company.name
+    fun message(t: PersonType, dayMillis: Long, list: List<Consumption>) =
+        ConsumptionMessage.build(t, dayMillis, list, template, companyName)
     var day by rememberSaveable { mutableStateOf(today) }
     var person by rememberSaveable { mutableStateOf("") }
     var picking by remember { mutableStateOf<Product?>(null) }
@@ -138,10 +145,10 @@ fun ConsumptionScreen(
         }
     }
     val dayEntries = remember(state.consumptions, day, type) {
-        state.consumptions.filter { it.dayMillis == day && it.personType == type }.sortedBy { it.timestamp }
+        state.consumptions.filter { it.dayMillis == day && it.personTypeId == type.id }.sortedBy { it.timestamp }
     }
     val people = remember(state.people, type) {
-        state.people.filter { it.type == type }.sortedBy { it.name.lowercase() }
+        state.people.filter { it.typeId == type.id }.sortedBy { it.name.lowercase() }
     }
     var addingPerson by remember { mutableStateOf(false) }
 
@@ -157,9 +164,10 @@ fun ConsumptionScreen(
         ) {
             ConsumptionHeader(
                 type = type,
+                groups = groups,
                 day = day,
                 today = today,
-                onTypeChange = { typeName = it.name; person = "" },
+                onTypeChange = { typeId = it.id; person = "" },
                 onDayChange = { day = it }
             )
 
@@ -281,6 +289,7 @@ fun ConsumptionScreen(
                 fullWidth {
                     DaySummary(
                         type = type,
+                        buildMessage = { list -> message(type, day, list) },
                         day = day,
                         entries = dayEntries,
                         onDelete = { deleting = it },
@@ -308,16 +317,18 @@ fun ConsumptionScreen(
 
     justAdded?.let { entry ->
         val allOfDay = state.consumptions
-            .filter { it.dayMillis == entry.dayMillis && it.personType == entry.personType }
+            .filter { it.dayMillis == entry.dayMillis && it.personTypeId == entry.personTypeId }
+        val entryType = PersonType.resolve(groups, entry.personTypeId)
+        val thisMessage = message(entryType, entry.dayMillis, listOf(entry))
         AfterConsumeDialog(
-            entry = entry,
+            message = thisMessage,
             dayCount = allOfDay.size,
             onSendThis = {
-                onSendWhatsApp(ConsumptionMessage.build(entry.personType, entry.dayMillis, listOf(entry)))
+                onSendWhatsApp(thisMessage)
                 justAdded = null
             },
             onSendDay = {
-                onSendWhatsApp(ConsumptionMessage.build(entry.personType, entry.dayMillis, allOfDay))
+                onSendWhatsApp(message(entryType, entry.dayMillis, allOfDay))
                 justAdded = null
             },
             onDismiss = { justAdded = null }
@@ -343,7 +354,7 @@ fun ConsumptionScreen(
         ConfirmDialog(
             emoji = "🗑️",
             title = "Apagar esta baixa?",
-            message = ConsumptionMessage.line(entry),
+            message = ConsumptionMessage.line(entry, template),
             confirmText = "Apagar",
             confirmColor = DangerRed,
             onConfirm = { onDelete(entry); deleting = null },
@@ -359,6 +370,7 @@ private fun LazyGridScope.fullWidth(content: @Composable () -> Unit) {
 @Composable
 private fun ConsumptionHeader(
     type: PersonType,
+    groups: List<PersonType>,
     day: Long,
     today: Long,
     onTypeChange: (PersonType) -> Unit,
@@ -380,21 +392,28 @@ private fun ConsumptionHeader(
                 fontSize = 13.sp
             )
             Spacer(Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PersonType.entries.forEach { t ->
-                    val selected = t == type
+            // Até 3 grupos dividem a largura; com mais, a linha rola para o lado
+            val fewGroups = groups.size <= 3
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = if (fewGroups) Modifier.fillMaxWidth()
+                else Modifier.horizontalScroll(rememberScrollState())
+            ) {
+                groups.forEach { t ->
+                    val selected = t.id == type.id
                     Text(
                         "${t.emoji} ${t.label.replaceFirstChar { it.uppercase() }}",
                         color = if (selected) ConsumoPink else Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .weight(1f)
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = (if (fewGroups) Modifier.weight(1f) else Modifier)
                             .clip(RoundedCornerShape(14.dp))
                             .background(if (selected) Color.White else Color.White.copy(alpha = 0.2f))
                             .clickable { onTypeChange(t) }
-                            .padding(vertical = 12.dp)
+                            .padding(vertical = 12.dp, horizontal = 14.dp)
                     )
                 }
             }
@@ -593,6 +612,7 @@ private fun ProductTile(product: Product, onClick: () -> Unit) {
 @Composable
 private fun DaySummary(
     type: PersonType,
+    buildMessage: (List<Consumption>) -> String,
     day: Long,
     entries: List<Consumption>,
     onDelete: (Consumption) -> Unit,
@@ -686,7 +706,7 @@ private fun DaySummary(
             }
         }
 
-        val message = ConsumptionMessage.build(type, day, entries)
+        val message = buildMessage(entries)
         Spacer(Modifier.height(16.dp))
         Text("💬 Mensagem para o WhatsApp", fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
@@ -777,13 +797,12 @@ private fun ConsumeDialog(
 /** Aparece logo depois de dar baixa, já com a mensagem pronta para o WhatsApp. */
 @Composable
 private fun AfterConsumeDialog(
-    entry: Consumption,
+    message: String,
     dayCount: Int,
     onSendThis: () -> Unit,
     onSendDay: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val message = ConsumptionMessage.build(entry.personType, entry.dayMillis, listOf(entry))
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Text("✅", fontSize = 40.sp) },

@@ -1,6 +1,8 @@
 package com.estoque.contagem.data
 
 import android.content.Context
+import com.estoque.contagem.consumo.AppSettings
+import com.estoque.contagem.consumo.MessageTemplate
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -66,7 +68,7 @@ class ProductRepository(context: Context) {
                 JSONObject()
                     .put("id", c.id)
                     .put("personName", c.personName)
-                    .put("personType", c.personType.name)
+                    .put("personType", c.personTypeId)
                     .put("productId", c.productId)
                     .put("productName", c.productName)
                     .put("quantity", c.quantity)
@@ -77,7 +79,7 @@ class ProductRepository(context: Context) {
         }
         val people = JSONArray()
         data.people.forEach { p ->
-            people.put(JSONObject().put("id", p.id).put("name", p.name).put("type", p.type.name))
+            people.put(JSONObject().put("id", p.id).put("name", p.name).put("type", p.typeId))
         }
         return JSONObject()
             .put("version", 3)
@@ -85,6 +87,10 @@ class ProductRepository(context: Context) {
             .put("products", products)
             .put("consumptions", consumptions)
             .put("people", people)
+            .put("groups", JSONArray().apply {
+                data.groups.forEach { g -> put(JSONObject().put("id", g.id).put("label", g.label).put("emoji", g.emoji)) }
+            })
+            .put("settings", settingsToJson(data.settings))
             .put(
                 "company",
                 JSONObject()
@@ -130,8 +136,7 @@ class ProductRepository(context: Context) {
             Consumption(
                 id = o.getString("id"),
                 personName = o.getString("personName"),
-                personType = PersonType.entries.firstOrNull { it.name == o.optString("personType") }
-                    ?: PersonType.EMPLOYEE,
+                personTypeId = o.optString("personType").ifBlank { PersonType.EMPLOYEE.id },
                 productId = o.optString("productId"),
                 productName = o.getString("productName"),
                 quantity = o.getLong("quantity"),
@@ -143,8 +148,8 @@ class ProductRepository(context: Context) {
         val peopleArr = json.optJSONArray("people") ?: JSONArray()
         val people = (0 until peopleArr.length()).mapNotNull { i ->
             val o = peopleArr.getJSONObject(i)
-            val type = PersonType.entries.firstOrNull { it.name == o.optString("type") } ?: return@mapNotNull null
-            Person(o.getString("id"), o.getString("name"), type)
+            val typeId = o.optString("type").ifBlank { return@mapNotNull null }
+            Person(o.getString("id"), o.getString("name"), typeId)
         }
         val companyJson = json.optJSONObject("company")
         val company = if (companyJson == null) CompanySettings() else CompanySettings(
@@ -152,12 +157,33 @@ class ProductRepository(context: Context) {
             document = companyJson.optString("document"),
             logoFile = if (companyJson.isNull("logo")) null else companyJson.optString("logo").ifBlank { null }
         )
+        val groupsArr = json.optJSONArray("groups")
+        val groups = if (groupsArr == null) PersonType.DEFAULTS else (0 until groupsArr.length()).mapNotNull { i ->
+            val o = groupsArr.getJSONObject(i)
+            val id = o.optString("id").ifBlank { return@mapNotNull null }
+            PersonType(id, o.optString("label").ifBlank { id.lowercase() }, o.optString("emoji").ifBlank { "👤" })
+        }.ifEmpty { PersonType.DEFAULTS }
         return StockData(
             products,
             json.optLong("countStartedAt", System.currentTimeMillis()),
             consumptions,
             people,
-            company
+            company,
+            groups,
+            json.optJSONObject("settings")?.let { settingsFromJson(it) } ?: AppSettings()
         )
     }
+
+    private fun settingsToJson(s: AppSettings): JSONObject = JSONObject()
+        .put("consumptionEnabled", s.consumptionEnabled)
+        .put("onboardingDone", s.onboardingDone)
+        .put("theme", s.theme)
+        .put("message", s.messageTemplate.toJson())
+
+    private fun settingsFromJson(o: JSONObject) = AppSettings(
+        consumptionEnabled = o.optBoolean("consumptionEnabled", true),
+        messageTemplate = o.optJSONObject("message")?.let { MessageTemplate.fromJson(it) } ?: MessageTemplate.DEFAULT,
+        onboardingDone = o.optBoolean("onboardingDone", false),
+        theme = o.optString("theme", "system").ifBlank { "system" }
+    )
 }

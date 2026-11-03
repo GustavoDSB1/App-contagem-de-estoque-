@@ -566,7 +566,7 @@ fun PersonFormDialog(
                 value = name,
                 onValueChange = { name = it.take(40); duplicate = false },
                 label = { Text("Nome") },
-                placeholder = { Text(if (type == PersonType.EMPLOYEE) "Ex.: Ricardo" else "Ex.: Andressa") },
+                placeholder = { Text(if (type.id == PersonType.DAY_WORKER.id) "Ex.: Andressa" else "Ex.: Ricardo") },
                 singleLine = true,
                 isError = duplicate,
                 supportingText = if (duplicate) {

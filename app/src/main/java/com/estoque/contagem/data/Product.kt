@@ -38,5 +38,8 @@ data class StockData(
     val countStartedAt: Long,
     val consumptions: List<Consumption> = emptyList(),
     val people: List<Person> = emptyList(),
-    val company: CompanySettings = CompanySettings()
+    val company: CompanySettings = CompanySettings(),
+    /** Grupos de pessoas da aba Consumo. */
+    val groups: List<PersonType> = PersonType.DEFAULTS,
+    val settings: com.estoque.contagem.consumo.AppSettings = com.estoque.contagem.consumo.AppSettings()
 )

@@ -4,5 +4,6 @@ package com.estoque.contagem.data
 data class Person(
     val id: String,
     val name: String,
-    val type: PersonType
+    /** Id do grupo ([PersonType.id]). */
+    val typeId: String
 )

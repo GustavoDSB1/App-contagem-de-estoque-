@@ -16,7 +16,7 @@ class ConsumptionMessageTest {
     private var seq = 0L
 
     private fun c(person: String, product: String, qty: Long, price: Long, type: PersonType = PersonType.EMPLOYEE) =
-        Consumption("id$seq", person, type, "p", product, qty, price, day, day + (seq++) * 1000)
+        Consumption("id$seq", person, type.id, "p", product, qty, price, day, day + (seq++) * 1000)
 
     @Test
     fun formatsMoney() {
@@ -50,6 +50,47 @@ class ConsumptionMessageTest {
             listOf(c("Andressa", "pipoca", 2, 1500, PersonType.DAY_WORKER))
         )
         assertEquals("Consumo diarista 02/10\nAndressa 2 pipoca 30,00", two)
+    }
+
+    @Test
+    fun customTemplateAndGroup() {
+        val cliente = PersonType("abc", "cliente", "🛒")
+        val template = MessageTemplate(
+            header = "{empresa} - Consumo {tipo} {data}",
+            line = "{qtd}x {produto} ({unitario}) = {valor} - {nome}",
+            blankLineBetweenPeople = false,
+            footer = "Total: {total}"
+        )
+        val msg = ConsumptionMessage.build(
+            cliente, day,
+            listOf(c("Ana", "pipoca", 2, 1500), c("Bia", "água", 1, 300)),
+            template, companyName = "Bar do Zé"
+        )
+        assertEquals(
+            "Bar do Zé - Consumo cliente 02/10\n" +
+                "2x pipoca (15,00) = 30,00 - Ana\n" +
+                "1x água (3,00) = 3,00 - Bia\n" +
+                "\n" +
+                "Total: 33,00",
+            msg
+        )
+    }
+
+    @Test
+    fun emptyFieldsDoNotLeaveExtraSpaces() {
+        // {empresa} vazio não deixa espaço sobrando no começo
+        val msg = ConsumptionMessage.build(
+            PersonType.EMPLOYEE, day, listOf(c("Ana", "café", 1, 200)),
+            MessageTemplate(header = "{empresa} Consumo {tipo}  {data}"), companyName = ""
+        )
+        assertEquals("Consumo funcionário 02/10\nAna 1 café 2,00", msg)
+    }
+
+    @Test
+    fun resolvesDeletedGroup() {
+        val groups = listOf(PersonType.EMPLOYEE)
+        assertEquals("funcionário", PersonType.resolve(groups, "EMPLOYEE").label)
+        assertEquals("xyz", PersonType.resolve(groups, "XYZ").label)
     }
 
     @Test
