@@ -48,5 +48,7 @@ data class AppSettings(
     /** Já viu a tela de boas-vindas. */
     val onboardingDone: Boolean = false,
     /** Tema: "system", "light" ou "dark". */
-    val theme: String = "system"
+    val theme: String = "system",
+    /** Última escolha: relatório com valores em R$. */
+    val exportWithValues: Boolean = false
 )

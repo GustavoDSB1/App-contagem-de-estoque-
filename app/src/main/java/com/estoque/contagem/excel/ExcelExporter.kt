@@ -20,8 +20,12 @@ data class ExportResult(
     val fileName: String,
     val shareUri: Uri,
     val savedToDownloads: Boolean,
-    val productCount: Int
-)
+    val productCount: Int,
+    /** Tipo do arquivo: planilha Excel ou PDF. */
+    val mime: String = ExcelExporter.MIME
+) {
+    val isPdf: Boolean get() = mime == PdfExporter.MIME
+}
 
 /** Gera a planilha, salva em Downloads e permite compartilhar/abrir. */
 object ExcelExporter {
@@ -33,17 +37,12 @@ object ExcelExporter {
         products: List<Product>,
         countStartedAt: Long,
         company: CompanyInfo = CompanyInfo(),
+        withValues: Boolean = false,
         now: Long = System.currentTimeMillis()
     ): ExportResult {
-        val sheets = StockReport.build(products, countStartedAt, now, company)
+        val sheets = StockReport.build(products, countStartedAt, now, company, withValues)
         val stamp = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.US).format(Date(now))
-        // Nome da empresa no arquivo, só com letras e números (ex.: Contagem_Mercadinho_Bom_Preco_2026-...)
-        val companyPart = java.text.Normalizer.normalize(company.name, java.text.Normalizer.Form.NFD)
-            .replace(Regex("\\p{Mn}+"), "")
-            .replace(Regex("[^A-Za-z0-9]+"), "_")
-            .trim('_')
-            .take(30)
-        val fileName = if (companyPart.isEmpty()) "Contagem_Estoque_$stamp.xlsx" else "Contagem_${companyPart}_$stamp.xlsx"
+        val fileName = "${baseFileName(company, stamp)}.xlsx"
 
         val dir = File(context.cacheDir, "planilhas").apply {
             mkdirs()
@@ -83,8 +82,21 @@ object ExcelExporter {
         }
     }
 
-    fun share(context: Context, result: ExportResult) =
-        shareFile(context, result.shareUri, MIME, "Contagem de estoque", "Enviar planilha")
+    /** Nome do arquivo sem extensão: Contagem_Estoque_<data> ou Contagem_<Empresa>_<data>. */
+    fun baseFileName(company: CompanyInfo, stamp: String): String {
+        // Só letras e números (ex.: Contagem_Mercadinho_Bom_Preco_2026-...)
+        val companyPart = java.text.Normalizer.normalize(company.name, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^A-Za-z0-9]+"), "_")
+            .trim('_')
+            .take(30)
+        return if (companyPart.isEmpty()) "Contagem_Estoque_$stamp" else "Contagem_${companyPart}_$stamp"
+    }
+
+    fun share(context: Context, result: ExportResult) = shareFile(
+        context, result.shareUri, result.mime, "Contagem de estoque",
+        if (result.isPdf) "Enviar PDF" else "Enviar planilha"
+    )
 
     /** Abre a lista de apps (WhatsApp, e-mail, Drive...) para enviar um arquivo. */
     fun shareFile(context: Context, uri: Uri, mime: String, subject: String, title: String) {
@@ -100,7 +112,7 @@ object ExcelExporter {
     /** Retorna false se não houver nenhum app que abra planilhas. */
     fun open(context: Context, result: ExportResult): Boolean {
         val view = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(result.shareUri, MIME)
+            setDataAndType(result.shareUri, result.mime)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         return try {

@@ -35,7 +35,11 @@ enum class CellStyle(
     // Com casas decimais (#,##0.00) para kg, litros etc.
     NUMBER_DEC(4, 0, 1, numFmt = 4, hAlign = "center"),
     NUMBER_DEC_ALT(4, 3, 1, numFmt = 4, hAlign = "center"),
-    TOTAL_NUMBER_DEC(4, 4, 1, numFmt = 4, hAlign = "center")
+    TOTAL_NUMBER_DEC(4, 4, 1, numFmt = 4, hAlign = "center"),
+    // Dinheiro: "R$ 1.234,50" (formato próprio 164)
+    MONEY(0, 0, 1, numFmt = 164, hAlign = "right"),
+    MONEY_ALT(0, 3, 1, numFmt = 164, hAlign = "right"),
+    TOTAL_MONEY(4, 4, 1, numFmt = 164, hAlign = "right")
 }
 
 sealed class Cell {
@@ -244,6 +248,8 @@ object XlsxWriter {
 
         append(HEADER)
         append("<styleSheet xmlns=\"$NS_MAIN\">")
+        // Formato de dinheiro em reais (id 164 = primeiro formato próprio)
+        append("<numFmts count=\"1\"><numFmt numFmtId=\"164\" formatCode=\"&quot;R\$&quot;\\ #,##0.00\"/></numFmts>")
         append("<fonts count=\"${fonts.size}\">${fonts.joinToString("")}</fonts>")
         append("<fills count=\"${fills.size}\">${fills.joinToString("")}</fills>")
         append("<borders count=\"${borders.size}\">${borders.joinToString("")}</borders>")

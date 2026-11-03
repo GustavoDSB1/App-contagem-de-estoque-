@@ -178,12 +178,14 @@ class ProductRepository(context: Context) {
         .put("consumptionEnabled", s.consumptionEnabled)
         .put("onboardingDone", s.onboardingDone)
         .put("theme", s.theme)
+        .put("exportWithValues", s.exportWithValues)
         .put("message", s.messageTemplate.toJson())
 
     private fun settingsFromJson(o: JSONObject) = AppSettings(
         consumptionEnabled = o.optBoolean("consumptionEnabled", true),
         messageTemplate = o.optJSONObject("message")?.let { MessageTemplate.fromJson(it) } ?: MessageTemplate.DEFAULT,
         onboardingDone = o.optBoolean("onboardingDone", false),
-        theme = o.optString("theme", "system").ifBlank { "system" }
+        theme = o.optString("theme", "system").ifBlank { "system" },
+        exportWithValues = o.optBoolean("exportWithValues", false)
     )
 }

@@ -97,6 +97,43 @@ class XlsxWriterTest {
     }
 
     @Test
+    fun valuesInReais() {
+        val products = listOf(
+            productDec("Queijo", 2.5, unit = MeasureUnit.KG).copy(priceCents = 1990), // 2,5 kg x R$ 19,90 = R$ 49,75
+            product("Coca", 3).copy(priceCents = 900),                                // 3 x R$ 9,00 = R$ 27,00
+            product("Brinde", 1).copy(excludeFromExcel = true, priceCents = 100_000)  // fora da planilha
+        )
+        assertEquals(4975L, StockReport.valueCents(products[0]))
+        val included = StockReport.reportProducts(products)
+        assertEquals(listOf("Coca", "Queijo"), included.map { it.name })
+        assertEquals(7675L, StockReport.totalValueCents(included))
+
+        val out = ByteArrayOutputStream()
+        XlsxWriter.write(StockReport.build(products, 0L, 0L, withValues = true), out)
+        val files = unzip(out.toByteArray())
+        val count = files.getValue("xl/worksheets/sheet1.xml")
+        assertTrue(count.contains(">Valor unit.<"))
+        assertTrue(count.contains(">Valor total<"))
+        assertTrue(count.contains("Valor total do estoque: R$ 76,75"))
+        // Linha extra do valor total: cabeçalho na 7, dados 8 e 9
+        assertTrue(count.contains("<f>SUM(F8:F9)</f><v>76.75</v>"))
+        assertTrue(count.contains("<v>49.75</v>"))
+        assertTrue(count.contains("<v>19.9</v>"))
+        assertTrue(!count.contains("Brinde"))
+        // Formato de dinheiro R$ registrado nos estilos
+        assertTrue(files.getValue("xl/styles.xml").contains("numFmtId=\"164\" formatCode=\"&quot;R$&quot;\\ #,##0.00\""))
+    }
+
+    @Test
+    fun withoutValuesHasNoMoneyColumns() {
+        val out = ByteArrayOutputStream()
+        XlsxWriter.write(StockReport.build(listOf(product("Coca", 3).copy(priceCents = 900)), 0L, 0L), out)
+        val count = unzip(out.toByteArray()).getValue("xl/worksheets/sheet1.xml")
+        assertTrue(!count.contains("Valor unit."))
+        assertTrue(!count.contains("Valor total do estoque"))
+    }
+
+    @Test
     fun numberTextHasNoScientificNotation() {
         assertEquals("12", XlsxWriter.numberText(12.0))
         assertEquals("2.5", XlsxWriter.numberText(2.5))

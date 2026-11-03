@@ -1,5 +1,6 @@
 package com.estoque.contagem.excel
 
+import com.estoque.contagem.consumo.Money
 import com.estoque.contagem.data.Product
 import com.estoque.contagem.data.Qty
 import java.text.Collator
@@ -26,11 +27,12 @@ object StockReport {
         products: List<Product>,
         countStartedAt: Long,
         generatedAt: Long,
-        company: CompanyInfo = CompanyInfo()
+        company: CompanyInfo = CompanyInfo(),
+        withValues: Boolean = false
     ): List<Sheet> {
         val sorted = sortByName(products.filterNot { it.excludeFromExcel })
         return listOf(
-            countSheet(sorted, countStartedAt, generatedAt, company),
+            countSheet(sorted, countStartedAt, generatedAt, company, withValues),
             historySheet(sorted, generatedAt, company)
         )
     }
@@ -83,6 +85,17 @@ object StockReport {
         }
     }
 
+    /** Produtos que vão para o relatório (sem os "fora da planilha"), na ordem do relatório. */
+    fun reportProducts(products: List<Product>): List<Product> {
+        val included = sortByName(products.filterNot { it.excludeFromExcel })
+        return if (included.any { it.category.isNotBlank() }) sortByCategoryAndName(included) else included
+    }
+
+    /** Valor de um produto no estoque: quantidade × valor unitário, em centavos. */
+    fun valueCents(p: Product): Long = Math.round(p.quantity * p.priceCents)
+
+    fun totalValueCents(products: List<Product>): Long = products.sumOf { valueCents(it) }
+
     /** Categorias usadas nos produtos, em ordem alfabética. */
     fun categories(products: List<Product>): List<String> {
         val collator = Collator.getInstance(BR).apply { strength = Collator.PRIMARY }
@@ -113,7 +126,8 @@ object StockReport {
         products: List<Product>,
         countStartedAt: Long,
         generatedAt: Long,
-        company: CompanyInfo
+        company: CompanyInfo,
+        withValues: Boolean
     ): Sheet {
         val hasCategories = products.any { it.category.isNotBlank() }
         val hasBarcodes = products.any { it.barcode.isNotBlank() }
@@ -123,7 +137,8 @@ object StockReport {
             (if (hasBarcodes) listOf("Código") else emptyList())
         val extraWidths = (if (hasCategories) listOf(20.0) else emptyList()) +
             (if (hasBarcodes) listOf(17.0) else emptyList())
-        val lastColIndex = 4 + extraHeaders.size
+        val valueHeaders = if (withValues) listOf("Valor unit.", "Valor total") else emptyList()
+        val lastColIndex = 4 + valueHeaders.size + extraHeaders.size
         val lastCol = XlsxWriter.columnName(lastColIndex)
         val total = Qty.round(products.sumOf { it.quantity })
         val anyDecimal = products.any { it.unit.allowsDecimals || it.quantity != Math.rint(it.quantity) }
@@ -149,9 +164,14 @@ object StockReport {
                 CellStyle.SUBTITLE
             )
         )
+        if (withValues) {
+            rows += listOf(
+                Cell.Text("Valor total do estoque: ${Money.formatWithSymbol(totalValueCents(products))}", CellStyle.INFO)
+            )
+        }
         val infoRows = rows.size
         rows += emptyList<Cell?>()
-        rows += (listOf("#", "Produto", "Quantidade", "Unidade") + extraHeaders + listOf("Última contagem"))
+        rows += (listOf("#", "Produto", "Quantidade", "Unidade") + valueHeaders + extraHeaders + listOf("Última contagem"))
             .map { Cell.Text(it, CellStyle.HEADER) }
         val headerRow = rows.size // número da linha do cabeçalho da tabela
 
@@ -163,7 +183,12 @@ object StockReport {
                 Cell.Text(p.name, if (alt) CellStyle.TEXT_ALT else CellStyle.TEXT),
                 Cell.Number(p.quantity, numberStyle(p, alt)),
                 Cell.Text(p.unit.code, if (alt) CellStyle.CENTER_ALT else CellStyle.CENTER)
-            ) + (if (hasCategories) listOf(Cell.Text(p.category.trim(), if (alt) CellStyle.TEXT_ALT else CellStyle.TEXT)) else emptyList()) +
+            ) + (
+                if (withValues) listOf(
+                    Cell.Number(p.priceCents / 100.0, if (alt) CellStyle.MONEY_ALT else CellStyle.MONEY),
+                    Cell.Number(valueCents(p) / 100.0, if (alt) CellStyle.MONEY_ALT else CellStyle.MONEY)
+                ) else emptyList()
+                ) + (if (hasCategories) listOf(Cell.Text(p.category.trim(), if (alt) CellStyle.TEXT_ALT else CellStyle.TEXT)) else emptyList()) +
                 (if (hasBarcodes) listOf(Cell.Text(p.barcode.trim(), if (alt) CellStyle.CENTER_ALT else CellStyle.CENTER)) else emptyList()) +
                 listOf(
                 p.lastCountAt?.let { Cell.Text(shortDateTime(it), if (alt) CellStyle.CENTER_ALT else CellStyle.CENTER) }
@@ -181,13 +206,19 @@ object StockReport {
                 total,
                 if (anyDecimal) CellStyle.TOTAL_NUMBER_DEC else CellStyle.TOTAL_NUMBER
             ),
-            Cell.Blank(CellStyle.TOTAL_LABEL),
             Cell.Blank(CellStyle.TOTAL_LABEL)
-        ) + extraHeaders.map { Cell.Blank(CellStyle.TOTAL_LABEL) }
+        ) + (
+            if (withValues) listOf(
+                Cell.Blank(CellStyle.TOTAL_LABEL),
+                if (products.isEmpty()) Cell.Number(0, CellStyle.TOTAL_MONEY)
+                else Cell.Formula("SUM(F$firstDataRow:F$lastDataRow)", totalValueCents(products) / 100.0, CellStyle.TOTAL_MONEY)
+            ) else emptyList()
+            ) + extraHeaders.map { Cell.Blank(CellStyle.TOTAL_LABEL) } + listOf(Cell.Blank(CellStyle.TOTAL_LABEL))
 
         return Sheet(
             name = "Contagem",
-            columnWidths = listOf(6.0, 40.0, 14.0, 10.0) + extraWidths + listOf(22.0),
+            columnWidths = listOf(6.0, 40.0, 14.0, 10.0) + (if (withValues) listOf(14.0, 16.0) else emptyList()) +
+                extraWidths + listOf(22.0),
             rows = rows,
             merges = (1..infoRows).map { "A$it:$lastCol$it" },
             rowHeights = mapOf(0 to 32.0, headerRow - 1 to 24.0),

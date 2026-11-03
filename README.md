@@ -18,6 +18,8 @@ Aplicativo Android simples e visual para contar estoque e gerar uma planilha Exc
 - **Corrigir o total** caso tenha contado errado.
 - **Acompanhar o progresso**: o topo mostra quantos produtos já foram contados e o total de itens.
   Cada produto mostra "✅ Contado" ou "⏳ Falta contar".
+- **Relatório em Excel ou PDF**, com opção de **incluir valores em R$** (valor unitário, valor total de
+  cada produto e do estoque). O PDF sai em A4, com logo, categorias e numeração de páginas.
 - **Gerar planilha Excel (.xlsx)** com todos os produtos, quantidades e a **data da contagem**:
   - Aba **Contagem**: produto, quantidade, data/hora da última contagem e total geral.
   - Aba **Histórico**: cada lançamento feito (data e hora, produto, somado/corrigido, quantidade).

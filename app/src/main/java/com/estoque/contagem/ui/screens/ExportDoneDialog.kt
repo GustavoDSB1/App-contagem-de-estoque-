@@ -31,7 +31,7 @@ fun ExportDoneDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Text("🎉", fontSize = 44.sp) },
-        title = { Text("Planilha pronta!", fontWeight = FontWeight.Bold) },
+        title = { Text(if (result.isPdf) "PDF pronto!" else "Planilha pronta!", fontWeight = FontWeight.Bold) },
         text = {
             Column {
                 Text(
@@ -71,7 +71,7 @@ fun ExportDoneDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
-                ) { Text("📄 Abrir planilha", fontWeight = FontWeight.Bold) }
+                ) { Text(if (result.isPdf) "📄 Abrir PDF" else "📄 Abrir planilha", fontWeight = FontWeight.Bold) }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } }

@@ -27,7 +27,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Switch
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -103,7 +105,7 @@ fun HomeScreen(
     exporting: Boolean,
     onOpenProduct: (String) -> Unit,
     onAddProduct: (ProductForm) -> Boolean,
-    onExport: () -> Unit,
+    onExport: (pdf: Boolean, withValues: Boolean) -> Unit,
     onImport: () -> Unit,
     onNewCount: () -> Unit,
     barcodeOwner: (String) -> String? = { null },
@@ -124,6 +126,7 @@ fun HomeScreen(
         )
     }
     var showNewCount by rememberSaveable { mutableStateOf(false) }
+    var showExportOptions by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var filterName by rememberSaveable { mutableStateOf(ProductFilter.ALL.name) }
     val filter = ProductFilter.valueOf(filterName)
@@ -163,7 +166,7 @@ fun HomeScreen(
             }
         },
         bottomBar = {
-            ExportBar(enabled = state.products.isNotEmpty(), exporting = exporting, onExport = onExport)
+            ExportBar(enabled = state.products.isNotEmpty(), exporting = exporting, onExport = { showExportOptions = true })
         }
     ) { padding ->
         Column(
@@ -260,6 +263,18 @@ fun HomeScreen(
                     newProductBarcode = ""
                 }
                 ok
+            }
+        )
+    }
+
+    if (showExportOptions) {
+        ExportOptionsDialog(
+            initialWithValues = state.settings.exportWithValues,
+            hasPrices = state.products.any { it.priceCents > 0 },
+            onDismiss = { showExportOptions = false },
+            onExport = { pdf, withValues ->
+                showExportOptions = false
+                onExport(pdf, withValues)
             }
         )
     }
@@ -601,6 +616,64 @@ private fun EmptyState(onAdd: () -> Unit, onImport: () -> Unit) {
     }
 }
 
+/** Escolha do formato (Excel ou PDF) e se o relatório leva os valores em R$. */
+@Composable
+private fun ExportOptionsDialog(
+    initialWithValues: Boolean,
+    hasPrices: Boolean,
+    onDismiss: () -> Unit,
+    onExport: (pdf: Boolean, withValues: Boolean) -> Unit
+) {
+    var withValues by rememberSaveable { mutableStateOf(initialWithValues) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Text("📊", fontSize = 40.sp) },
+        title = { Text("Gerar relatório da contagem", fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) },
+        text = {
+            Column {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { withValues = !withValues }
+                        .padding(vertical = 4.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("💲 Incluir valores (R$)", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (hasPrices) "Valor unitário, valor total de cada produto e do estoque"
+                            else "Nenhum produto tem valor cadastrado ainda",
+                            fontSize = 12.sp,
+                            color = TextSecondary
+                        )
+                    }
+                    Switch(checked = withValues, onCheckedChange = { withValues = it })
+                }
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = { onExport(false, withValues) },
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = ExcelGreen),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                ) { Text("📊 Planilha Excel", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = { onExport(true, withValues) },
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DangerRed),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                ) { Text("📄 PDF (para imprimir ou enviar)", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+
 @Composable
 private fun ExportBar(enabled: Boolean, exporting: Boolean, onExport: () -> Unit) {
     Surface(color = Color.White, shadowElevation = 12.dp) {
@@ -629,7 +702,7 @@ private fun ExportBar(enabled: Boolean, exporting: Boolean, onExport: () -> Unit
                 }
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    if (exporting) "Gerando planilha..." else "Gerar planilha Excel",
+                    if (exporting) "Gerando relatório..." else "Gerar planilha ou PDF",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )

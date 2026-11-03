@@ -216,13 +216,13 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
                                 if (ok) notify("📦 ${form.name} cadastrado!")
                                 ok
                             },
-                            onExport = {
+                            onExport = { pdf, withValues ->
                                 exporting = true
-                                vm.exportExcel { result ->
+                                vm.exportReport(pdf, withValues) { result ->
                                     exporting = false
                                     result
                                         .onSuccess { exportResult = it }
-                                        .onFailure { notify("❌ Não foi possível gerar a planilha: ${it.message}") }
+                                        .onFailure { notify("❌ Não foi possível gerar o relatório: ${it.message}") }
                                 }
                             },
                             onImport = openImport,

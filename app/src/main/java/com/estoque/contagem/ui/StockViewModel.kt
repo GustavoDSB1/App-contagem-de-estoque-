@@ -27,6 +27,7 @@ import com.estoque.contagem.data.Product
 import com.estoque.contagem.data.ProductRepository
 import com.estoque.contagem.data.StockData
 import com.estoque.contagem.excel.ExcelExporter
+import com.estoque.contagem.excel.PdfExporter
 import com.estoque.contagem.excel.ExportResult
 import com.estoque.contagem.excel.ImportException
 import com.estoque.contagem.excel.ImportedProduct
@@ -543,7 +544,12 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun exportExcel(onDone: (Result<ExportResult>) -> Unit) {
+    /** Gera o relatório da contagem em Excel ([pdf] = false) ou PDF, com ou sem valores em R$. */
+    fun exportReport(pdf: Boolean, withValues: Boolean, onDone: (Result<ExportResult>) -> Unit) {
+        // Lembra a escolha de valores para a próxima vez
+        if (_state.value.settings.exportWithValues != withValues) {
+            update { it.copy(settings = it.settings.copy(exportWithValues = withValues)) }
+        }
         val snapshot = _state.value
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
@@ -553,7 +559,11 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     val c = snapshot.company
                     val company = CompanyInfo(c.name, c.document, ProductImages.readJpeg(getApplication(), c.logoFile))
-                    ExcelExporter.export(getApplication(), snapshot.products, snapshot.countStartedAt, company)
+                    if (pdf) {
+                        PdfExporter.export(getApplication(), snapshot.products, snapshot.countStartedAt, company, withValues)
+                    } else {
+                        ExcelExporter.export(getApplication(), snapshot.products, snapshot.countStartedAt, company, withValues)
+                    }
                 }
             }
             onDone(result)
