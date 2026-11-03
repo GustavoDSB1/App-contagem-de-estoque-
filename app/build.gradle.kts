@@ -74,6 +74,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
+    // Leitor de código de barras do Google (usa o Play Services; não precisa de permissão de câmera)
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")

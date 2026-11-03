@@ -30,7 +30,7 @@ class ProductImportTest {
             product("Coca 600", 18.0, countedAt),
             product("Sabão em pó & amaciante", 15.0, countedAt),
             product("Óleo de soja", 0.0, null, MeasureUnit.L),
-            product("Queijo", 2.5, countedAt, MeasureUnit.KG).copy(category = "Frios")
+            product("Queijo", 2.5, countedAt, MeasureUnit.KG).copy(category = "Frios", barcode = "2000000000017")
         )
         val out = ByteArrayOutputStream()
         XlsxWriter.write(StockReport.build(original, countedAt, countedAt), out)
@@ -44,6 +44,7 @@ class ProductImportTest {
         assertEquals(listOf(2.5, 18.0, 0.0, 15.0), imported.map { it.quantity })
         assertEquals(listOf(MeasureUnit.KG, MeasureUnit.UN, MeasureUnit.L, MeasureUnit.UN), imported.map { it.unit })
         assertEquals(listOf("Frios", "", "", ""), imported.map { it.category })
+        assertEquals(listOf("2000000000017", "", "", ""), imported.map { it.barcode })
         assertEquals(countedAt, imported[1].lastCountAt)
         assertNull(imported[2].lastCountAt) // "Não contado"
         assertEquals("🧀", imported[0].emoji)

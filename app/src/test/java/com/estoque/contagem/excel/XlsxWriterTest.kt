@@ -76,6 +76,18 @@ class XlsxWriterTest {
     }
 
     @Test
+    fun barcodeColumnWhenAnyProductHasCode() {
+        val products = listOf(product("Coca", 5).copy(barcode = "7894900011517"), product("Arroz", 1))
+        val out = ByteArrayOutputStream()
+        XlsxWriter.write(StockReport.build(products, 0L, 0L), out)
+        val count = unzip(out.toByteArray()).getValue("xl/worksheets/sheet1.xml")
+        assertTrue(count.contains(">Código<"))
+        // Código como texto (não vira número/notação científica no Excel)
+        assertTrue(count.contains("t=\"inlineStr\"><is><t xml:space=\"preserve\">7894900011517</t>"))
+        assertTrue(count.contains("<autoFilter ref=\"A6:F8\"/>"))
+    }
+
+    @Test
     fun noCategoryColumnWhenNoneIsUsed() {
         val out = ByteArrayOutputStream()
         XlsxWriter.write(StockReport.build(listOf(product("Arroz", 1)), 0L, 0L), out)

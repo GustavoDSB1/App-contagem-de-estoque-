@@ -1,5 +1,6 @@
 package com.estoque.contagem.excel
 
+import com.estoque.contagem.data.Barcodes
 import com.estoque.contagem.data.MeasureUnit
 import com.estoque.contagem.data.Qty
 import java.text.Normalizer
@@ -16,7 +17,8 @@ data class ImportedProduct(
     val lastCountAt: Long?,
     val emoji: String,
     val unit: MeasureUnit = MeasureUnit.UN,
-    val category: String = ""
+    val category: String = "",
+    val barcode: String = ""
 )
 
 class ImportException(message: String) : Exception(message)
@@ -38,6 +40,9 @@ object ProductImport {
         "valor", "preco", "valor de venda", "preco de venda", "valor unitario", "preco unitario", "r$"
     )
     private val DATE_HEADERS = setOf("ultima contagem", "data", "data da contagem")
+    private val CODE_HEADERS = setOf(
+        "codigo", "codigo de barras", "cod barras", "cod. barras", "cod. de barras", "ean", "gtin", "barcode"
+    )
     private val CATEGORY_HEADERS = setOf("categoria", "categorias", "grupo", "secao", "departamento", "tipo")
     private val UNIT_HEADERS = setOf("unidade", "un", "und", "unid", "medida", "unidade de medida")
 
@@ -63,6 +68,7 @@ object ProductImport {
         val dateCol = header.indexOfFirst { it in DATE_HEADERS }
         val unitCol = header.indexOfFirst { it in UNIT_HEADERS }
         val categoryCol = header.indexOfFirst { it in CATEGORY_HEADERS }
+        val codeCol = header.indexOfFirst { it in CODE_HEADERS }
 
         val seen = HashSet<String>()
         val products = mutableListOf<ImportedProduct>()
@@ -78,7 +84,8 @@ object ProductImport {
                 lastCountAt = row.cell(dateCol)?.let { parseDate(it) },
                 emoji = guessEmoji(name),
                 unit = MeasureUnit.fromText(row.cell(unitCol)),
-                category = row.cell(categoryCol)?.replace(Regex("\\s+"), " ")?.take(40).orEmpty()
+                category = row.cell(categoryCol)?.replace(Regex("\\s+"), " ")?.take(40).orEmpty(),
+                barcode = Barcodes.fromSpreadsheet(row.cell(codeCol))
             )
         }
         return products

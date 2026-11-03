@@ -13,7 +13,10 @@ class BackupFormatTest {
         val photo = byteArrayOf(1, 2, 3, 4, 5)
         val original = BackupData(
             products = listOf(
-                BackupProduct("Coca 600", "🥤", 1, 900, photo, unit = MeasureUnit.L, category = "Bebidas"),
+                BackupProduct(
+                    "Coca 600", "🥤", 1, 900, photo,
+                    unit = MeasureUnit.L, category = "Bebidas", barcode = "7894900011517"
+                ),
                 BackupProduct("Pipoca \"doce\"", "🍬", 2, 1500, null)
             ),
             people = listOf(BackupPerson("Ricardo", PersonType.EMPLOYEE), BackupPerson("Andressa", PersonType.DAY_WORKER)),
@@ -28,6 +31,7 @@ class BackupFormatTest {
         assertArrayEquals(photo, decoded.products[0].photoJpeg)
         assertEquals(MeasureUnit.L, decoded.products[0].unit)
         assertEquals("Bebidas", decoded.products[0].category)
+        assertEquals("7894900011517", decoded.products[0].barcode)
         assertEquals(MeasureUnit.UN, decoded.products[1].unit)
         assertEquals("", decoded.products[1].category)
         assertEquals("Pipoca \"doce\"", decoded.products[1].name)

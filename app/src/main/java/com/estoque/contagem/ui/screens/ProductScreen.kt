@@ -82,6 +82,7 @@ fun ProductScreen(
     onEdit: (ProductForm) -> Boolean,
     /** Categorias já usadas (para sugerir na edição). */
     categories: List<String> = emptyList(),
+    barcodeOwner: (String) -> String? = { null },
     onExcludeFromExcel: (Boolean) -> Unit,
     onDelete: () -> Unit
 ) {
@@ -389,6 +390,7 @@ fun ProductScreen(
             initialCategory = product.category,
             initialBarcode = product.barcode,
             categories = categories,
+            barcodeOwner = barcodeOwner,
             askInitialQuantity = false,
             onDismiss = { showEdit = false },
             onSave = { form ->

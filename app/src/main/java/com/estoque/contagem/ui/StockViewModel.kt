@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.estoque.contagem.data.Consumption
 import com.estoque.contagem.data.CountEntry
 import com.estoque.contagem.data.BackupCompany
+import com.estoque.contagem.data.Barcodes
 import com.estoque.contagem.data.BackupData
 import com.estoque.contagem.data.CompanySettings
 import com.estoque.contagem.excel.CompanyInfo
@@ -121,6 +122,10 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
         _state.value.products.any { it.id != exceptId && it.name.equals(name.trim(), ignoreCase = true) }
 
     fun isNameTaken(name: String, exceptId: String? = null) = nameTaken(name, exceptId)
+
+    /** Nome do produto que já usa esse código de barras (ou null). */
+    fun barcodeOwner(code: String, exceptId: String? = null): String? =
+        Barcodes.find(_state.value.products.filter { it.id != exceptId }, code)?.name
 
     /** Retorna false se já existir um produto com o mesmo nome. */
     fun addProduct(form: ProductForm): Boolean {
@@ -289,7 +294,8 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                     createdAt = now,
                     priceCents = item.priceCents,
                     unit = item.unit,
-                    category = item.category
+                    category = item.category,
+                    barcode = item.barcode
                 )
             }
             added = newOnes.size
@@ -342,7 +348,8 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                         products = snapshot.products.map { p ->
                             BackupProduct(
                                 p.name, p.emoji, p.colorIndex, p.priceCents,
-                                ProductImages.readJpeg(app, p.imageFile), p.excludeFromExcel, p.unit, p.category
+                                ProductImages.readJpeg(app, p.imageFile), p.excludeFromExcel, p.unit, p.category,
+                                p.barcode
                             )
                         },
                         people = snapshot.people.map { BackupPerson(it.name, it.type) },
@@ -441,7 +448,8 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                             imageFile = photo,
                             excludeFromExcel = b.excludeFromExcel,
                             unit = b.unit,
-                            category = b.category
+                            category = b.category,
+                            barcode = b.barcode
                         )
                         added += p
                         byName[key] = p
@@ -453,6 +461,7 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                         if (!usePhoto && photo != null) unused += photo
                         updatedIds[current.id] = current.copy(
                             category = current.category.ifBlank { b.category },
+                            barcode = current.barcode.ifBlank { b.barcode },
                             priceCents = if (b.priceCents > 0) b.priceCents else current.priceCents,
                             imageFile = if (usePhoto) photo else current.imageFile
                         )

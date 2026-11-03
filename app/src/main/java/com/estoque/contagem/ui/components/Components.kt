@@ -57,6 +57,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.estoque.contagem.consumo.Money
+import com.estoque.contagem.data.BarcodeScanner
+import com.estoque.contagem.data.Barcodes
 import com.estoque.contagem.data.MeasureUnit
 import com.estoque.contagem.data.PersonType
 import com.estoque.contagem.data.Qty
@@ -169,6 +171,47 @@ fun CategoryField(category: String, categories: List<String>, onChange: (String)
     }
 }
 
+/** Campo do código de barras com botão para ler pela câmera. */
+@Composable
+fun BarcodeField(barcode: String, onChange: (String) -> Unit, inUseBy: String?) {
+    val context = LocalContext.current
+    var error by remember { mutableStateOf<String?>(null) }
+    OutlinedTextField(
+        value = barcode,
+        onValueChange = { onChange(Barcodes.clean(it)); error = null },
+        label = { Text("Código de barras (opcional)") },
+        singleLine = true,
+        isError = inUseBy != null || error != null,
+        supportingText = when {
+            inUseBy != null -> {
+                { Text("Esse código já é do produto \"$inUseBy\"") }
+            }
+            error != null -> {
+                { Text(error!!) }
+            }
+            else -> null
+        },
+        trailingIcon = {
+            androidx.compose.material3.IconButton(onClick = {
+                BarcodeScanner.scan(
+                    context,
+                    onResult = { onChange(it); error = null },
+                    onError = { error = it }
+                )
+            }) {
+                androidx.compose.material3.Icon(
+                    androidx.compose.ui.res.painterResource(com.estoque.contagem.R.drawable.ic_barcode),
+                    contentDescription = "Ler código de barras",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
 /** Escolha da unidade de medida (un, kg, L, cx...). */
 @Composable
 fun UnitPicker(selected: MeasureUnit, onSelect: (MeasureUnit) -> Unit) {
@@ -260,6 +303,8 @@ fun ProductFormDialog(
     initialBarcode: String = "",
     /** Categorias já usadas, para escolher com um toque. */
     categories: List<String> = emptyList(),
+    /** Diz qual outro produto já usa um código de barras (null = livre). */
+    barcodeOwner: (String) -> String? = { null },
     askInitialQuantity: Boolean,
     onDismiss: () -> Unit,
     onSave: (ProductForm) -> Boolean
@@ -357,6 +402,9 @@ fun ProductFormDialog(
                 )
                 Spacer(Modifier.height(8.dp))
                 CategoryField(category = category, categories = categories, onChange = { category = it })
+                Spacer(Modifier.height(8.dp))
+                val barcodeInUseBy = remember(barcode) { barcode.trim().takeIf { it.isNotEmpty() }?.let(barcodeOwner) }
+                BarcodeField(barcode = barcode, onChange = { barcode = it }, inUseBy = barcodeInUseBy)
                 Spacer(Modifier.height(12.dp))
                 Text("Foto do produto", fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
@@ -448,7 +496,8 @@ fun ProductFormDialog(
         },
         confirmButton = {
             Button(
-                enabled = name.isNotBlank() && !processing,
+                enabled = name.isNotBlank() && !processing &&
+                    (barcode.isBlank() || barcodeOwner(barcode.trim()) == null),
                 onClick = {
                     val ok = onSave(
                         ProductForm(

@@ -10,6 +10,9 @@ Aplicativo Android simples e visual para contar estoque e gerar uma planilha Exc
   com **casas decimais** onde faz sentido (ex.: 2,5 kg). A planilha tem a coluna Unidade.
 - **Categorias** (ex.: Bebidas, Limpeza): filtro na lista e no Consumo; na planilha os produtos saem
   agrupados por categoria, com coluna própria e filtros do Excel no cabeçalho.
+- **Código de barras**: leitura pela câmera (leitor do Google, sem pedir permissão de câmera). No Estoque
+  abre o produto para contar (ou oferece cadastrar um novo com o código); no Consumo abre a baixa.
+  A busca também encontra pelo código; planilha, importação e backup levam o código.
 - **Somar quantidades**: toque no produto, digite quanto contou e salve. Na próxima vez o valor é
   **somado** ao que já existe (ex.: 12 + 5 = 17). Botões rápidos `+1`, `+5`, `+10`, `+50`.
 - **Corrigir o total** caso tenha contado errado.

@@ -64,6 +64,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -73,6 +75,9 @@ import androidx.compose.ui.unit.sp
 import com.estoque.contagem.consumo.ConsumptionMessage
 import com.estoque.contagem.consumo.Days
 import com.estoque.contagem.consumo.Money
+import com.estoque.contagem.R
+import com.estoque.contagem.data.BarcodeScanner
+import com.estoque.contagem.data.Barcodes
 import com.estoque.contagem.data.Consumption
 import com.estoque.contagem.data.Person
 import com.estoque.contagem.data.PersonType
@@ -104,8 +109,10 @@ fun ConsumptionScreen(
     onSendWhatsApp: (String) -> Unit,
     onCopy: (String) -> Unit,
     onNeedName: () -> Unit,
-    onAddPerson: (name: String, type: PersonType) -> Boolean
+    onAddPerson: (name: String, type: PersonType) -> Boolean,
+    onMessage: (String) -> Unit = {}
 ) {
+    val context = LocalContext.current
     val today = Days.startOfDay(System.currentTimeMillis())
     var typeName by rememberSaveable { mutableStateOf(PersonType.EMPLOYEE.name) }
     val type = PersonType.valueOf(typeName)
@@ -126,7 +133,8 @@ fun ConsumptionScreen(
     val shownProducts = remember(products, search, categoryFilter) {
         val q = search.trim().normalizedForSearch()
         products.filter {
-            matchesCategory(it, categoryFilter) && (q.isEmpty() || it.name.normalizedForSearch().contains(q))
+            matchesCategory(it, categoryFilter) &&
+                (q.isEmpty() || it.name.normalizedForSearch().contains(q) || it.barcode.contains(search.trim()))
         }
     }
     val dayEntries = remember(state.consumptions, day, type) {
@@ -175,6 +183,33 @@ fun ConsumptionScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.weight(1f)) { StepTitle("2️⃣", "Toque no produto consumido") }
                         if (products.isNotEmpty()) {
+                            // Ler código de barras: abre direto a baixa do produto
+                            IconButton(
+                                onClick = {
+                                    BarcodeScanner.scan(
+                                        context,
+                                        onResult = { code ->
+                                            val found = Barcodes.find(state.products, code)
+                                            when {
+                                                found == null -> onMessage("🔍 Nenhum produto com o código $code")
+                                                person.isBlank() -> onNeedName()
+                                                else -> picking = found
+                                            }
+                                        },
+                                        onError = onMessage
+                                    )
+                                },
+                                colors = IconButtonDefaults.iconButtonColors(
+                                    containerColor = Color.White,
+                                    contentColor = ConsumoOrange
+                                )
+                            ) {
+                                Icon(
+                                    painterResource(R.drawable.ic_barcode),
+                                    contentDescription = "Ler código de barras"
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
                             IconButton(
                                 onClick = {
                                     if (searchOpen) search = ""

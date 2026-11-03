@@ -59,11 +59,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.estoque.contagem.R
+import com.estoque.contagem.data.BarcodeScanner
+import com.estoque.contagem.data.Barcodes
 import com.estoque.contagem.data.Product
 import com.estoque.contagem.excel.StockReport
 import com.estoque.contagem.ui.ProductForm
@@ -100,9 +105,24 @@ fun HomeScreen(
     onAddProduct: (ProductForm) -> Boolean,
     onExport: () -> Unit,
     onImport: () -> Unit,
-    onNewCount: () -> Unit
+    onNewCount: () -> Unit,
+    barcodeOwner: (String) -> String? = { null },
+    onMessage: (String) -> Unit = {}
 ) {
+    val context = LocalContext.current
     var showNewProduct by rememberSaveable { mutableStateOf(false) }
+    var newProductBarcode by rememberSaveable { mutableStateOf("") }
+    var unknownCode by rememberSaveable { mutableStateOf<String?>(null) }
+    val scan = {
+        BarcodeScanner.scan(
+            context,
+            onResult = { code ->
+                val found = Barcodes.find(state.products, code)
+                if (found != null) onOpenProduct(found.id) else unknownCode = code
+            },
+            onError = onMessage
+        )
+    }
     var showNewCount by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var filterName by rememberSaveable { mutableStateOf(ProductFilter.ALL.name) }
@@ -122,7 +142,7 @@ fun HomeScreen(
         val q = query.trim().normalizedForSearch()
         sorted.filter {
             filter.matches(it) && matchesCategory(it, categoryFilter) &&
-                (q.isEmpty() || it.name.normalizedForSearch().contains(q))
+                (q.isEmpty() || it.name.normalizedForSearch().contains(q) || it.barcode.contains(query.trim()))
         }
     }
 
@@ -161,7 +181,7 @@ fun HomeScreen(
                 state.products.isEmpty() -> EmptyState(onAdd = { showNewProduct = true }, onImport = onImport)
 
                 else -> {
-                    SearchField(query = query, onQueryChange = { query = it })
+                    SearchField(query = query, onQueryChange = { query = it }, onScan = scan)
                     FilterChips(
                         selected = filter,
                         counts = counts,
@@ -229,13 +249,34 @@ fun HomeScreen(
         ProductFormDialog(
             title = "Novo produto",
             askInitialQuantity = true,
-            onDismiss = { showNewProduct = false },
+            initialBarcode = newProductBarcode,
+            onDismiss = { showNewProduct = false; newProductBarcode = "" },
             categories = StockReport.categories(state.products),
+            barcodeOwner = barcodeOwner,
             onSave = { form ->
                 val ok = onAddProduct(form)
-                if (ok) showNewProduct = false
+                if (ok) {
+                    showNewProduct = false
+                    newProductBarcode = ""
+                }
                 ok
             }
+        )
+    }
+
+    unknownCode?.let { code ->
+        ConfirmDialog(
+            emoji = "🔍",
+            title = "Código não cadastrado",
+            message = "Nenhum produto tem o código $code.\nQuer cadastrar um produto novo com ele?",
+            confirmText = "Cadastrar produto",
+            confirmColor = Indigo,
+            onConfirm = {
+                newProductBarcode = code
+                unknownCode = null
+                showNewProduct = true
+            },
+            onDismiss = { unknownCode = null }
         )
     }
 
@@ -401,16 +442,24 @@ private fun FilterChips(
 }
 
 @Composable
-private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
+private fun SearchField(query: String, onQueryChange: (String) -> Unit, onScan: () -> Unit) {
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        placeholder = { Text("Buscar produto...") },
+        placeholder = { Text("Buscar produto ou código...") },
         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
         trailingIcon = {
             if (query.isNotEmpty()) {
                 IconButton(onClick = { onQueryChange("") }) {
                     Icon(Icons.Filled.Clear, contentDescription = "Limpar busca")
+                }
+            } else {
+                IconButton(onClick = onScan) {
+                    Icon(
+                        painterResource(R.drawable.ic_barcode),
+                        contentDescription = "Ler código de barras",
+                        tint = Indigo
+                    )
                 }
             }
         },

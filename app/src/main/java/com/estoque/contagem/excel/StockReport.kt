@@ -116,8 +116,15 @@ object StockReport {
         company: CompanyInfo
     ): Sheet {
         val hasCategories = products.any { it.category.isNotBlank() }
+        val hasBarcodes = products.any { it.barcode.isNotBlank() }
         val ordered = if (hasCategories) sortByCategoryAndName(products) else products
-        val lastCol = XlsxWriter.columnName(if (hasCategories) 5 else 4)
+        // Colunas: #, Produto, Quantidade, Unidade, [Categoria], [Código], Última contagem
+        val extraHeaders = (if (hasCategories) listOf("Categoria") else emptyList()) +
+            (if (hasBarcodes) listOf("Código") else emptyList())
+        val extraWidths = (if (hasCategories) listOf(20.0) else emptyList()) +
+            (if (hasBarcodes) listOf(17.0) else emptyList())
+        val lastColIndex = 4 + extraHeaders.size
+        val lastCol = XlsxWriter.columnName(lastColIndex)
         val total = Qty.round(products.sumOf { it.quantity })
         val anyDecimal = products.any { it.unit.allowsDecimals || it.quantity != Math.rint(it.quantity) }
         val counted = products.count { it.wasCounted }
@@ -144,9 +151,8 @@ object StockReport {
         )
         val infoRows = rows.size
         rows += emptyList<Cell?>()
-        rows += (listOf("#", "Produto", "Quantidade", "Unidade") +
-            (if (hasCategories) listOf("Categoria") else emptyList()) +
-            listOf("Última contagem")).map { Cell.Text(it, CellStyle.HEADER) }
+        rows += (listOf("#", "Produto", "Quantidade", "Unidade") + extraHeaders + listOf("Última contagem"))
+            .map { Cell.Text(it, CellStyle.HEADER) }
         val headerRow = rows.size // número da linha do cabeçalho da tabela
 
         val firstDataRow = rows.size + 1 // número da linha no Excel (começa em 1)
@@ -157,7 +163,9 @@ object StockReport {
                 Cell.Text(p.name, if (alt) CellStyle.TEXT_ALT else CellStyle.TEXT),
                 Cell.Number(p.quantity, numberStyle(p, alt)),
                 Cell.Text(p.unit.code, if (alt) CellStyle.CENTER_ALT else CellStyle.CENTER)
-            ) + (if (hasCategories) listOf(Cell.Text(p.category.trim(), if (alt) CellStyle.TEXT_ALT else CellStyle.TEXT)) else emptyList()) + listOf(
+            ) + (if (hasCategories) listOf(Cell.Text(p.category.trim(), if (alt) CellStyle.TEXT_ALT else CellStyle.TEXT)) else emptyList()) +
+                (if (hasBarcodes) listOf(Cell.Text(p.barcode.trim(), if (alt) CellStyle.CENTER_ALT else CellStyle.CENTER)) else emptyList()) +
+                listOf(
                 p.lastCountAt?.let { Cell.Text(shortDateTime(it), if (alt) CellStyle.CENTER_ALT else CellStyle.CENTER) }
                     ?: Cell.Text("Não contado", if (alt) CellStyle.WARN_ALT else CellStyle.WARN)
             )
@@ -175,16 +183,16 @@ object StockReport {
             ),
             Cell.Blank(CellStyle.TOTAL_LABEL),
             Cell.Blank(CellStyle.TOTAL_LABEL)
-        ) + (if (hasCategories) listOf(Cell.Blank(CellStyle.TOTAL_LABEL)) else emptyList())
+        ) + extraHeaders.map { Cell.Blank(CellStyle.TOTAL_LABEL) }
 
         return Sheet(
             name = "Contagem",
-            columnWidths = listOf(6.0, 40.0, 14.0, 10.0) + (if (hasCategories) listOf(20.0) else emptyList()) + listOf(22.0),
+            columnWidths = listOf(6.0, 40.0, 14.0, 10.0) + extraWidths + listOf(22.0),
             rows = rows,
             merges = (1..infoRows).map { "A$it:$lastCol$it" },
             rowHeights = mapOf(0 to 32.0, headerRow - 1 to 24.0),
             frozenRows = headerRow,
-            image = logoImage(company, column = if (hasCategories) 5 else 4, columnWidthChars = 22.0),
+            image = logoImage(company, column = lastColIndex, columnWidthChars = 22.0),
             autoFilter = if (products.isEmpty()) null else "A$headerRow:$lastCol$lastDataRow"
         )
     }

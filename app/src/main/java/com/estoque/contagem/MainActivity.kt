@@ -165,6 +165,7 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
                 },
                 onEdit = { form -> vm.editProduct(product.id, form) },
                 categories = com.estoque.contagem.excel.StockReport.categories(state.products),
+                barcodeOwner = { code -> vm.barcodeOwner(code, exceptId = product.id) },
                 onExcludeFromExcel = { excluded -> vm.setExcludedFromExcel(product.id, excluded) },
                 onDelete = {
                     vm.deleteProduct(product.id)
@@ -219,6 +220,8 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
                                 }
                             },
                             onImport = openImport,
+                            barcodeOwner = { code -> vm.barcodeOwner(code) },
+                            onMessage = { notify(it) },
                             onNewCount = {
                                 vm.startNewCount()
                                 notify("🔄 Nova contagem iniciada!")
@@ -238,7 +241,8 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
                                 notify("📋 Mensagem copiada!")
                             },
                             onNeedName = { notify("👆 Primeiro toque no nome de quem consumiu") },
-                            onAddPerson = { name, type -> vm.addPerson(name, type) }
+                            onAddPerson = { name, type -> vm.addPerson(name, type) },
+                            onMessage = { notify(it) }
                         )
                     } else screenStates.SaveableStateProvider("mais") {
                         MoreScreen(
