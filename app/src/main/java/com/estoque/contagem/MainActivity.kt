@@ -155,14 +155,15 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
                 onAdd = { amount ->
                     vm.addQuantity(product.id, amount)
                     openProductId = null
-                    notify("✅ +${formatQty(amount)} em ${product.name} (total ${formatQty(product.quantity + amount)})")
+                    val u = product.unit.code
+                    notify("✅ +${formatQty(amount)} $u em ${product.name} (total ${formatQty(product.quantity + amount)} $u)")
                 },
                 onSetTotal = { value ->
                     vm.setQuantity(product.id, value)
                     openProductId = null
-                    notify("✏️ ${product.name} corrigido para ${formatQty(value)}")
+                    notify("✏️ ${product.name} corrigido para ${formatQty(value)} ${product.unit.code}")
                 },
-                onEdit = { name, emoji, price, photo -> vm.editProduct(product.id, name, emoji, price, photo) },
+                onEdit = { name, emoji, price, photo, unit -> vm.editProduct(product.id, name, emoji, price, photo, unit) },
                 onExcludeFromExcel = { excluded -> vm.setExcludedFromExcel(product.id, excluded) },
                 onDelete = {
                     vm.deleteProduct(product.id)
@@ -202,8 +203,8 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
                             snackbarHostState = snackbar,
                             exporting = exporting,
                             onOpenProduct = { openProductId = it },
-                            onAddProduct = { name, emoji, qty, price, photo ->
-                                val ok = vm.addProduct(name, emoji, qty, price, photo)
+                            onAddProduct = { name, emoji, qty, price, photo, unit ->
+                                val ok = vm.addProduct(name, emoji, qty, price, photo, unit)
                                 if (ok) notify("📦 $name cadastrado!")
                                 ok
                             },

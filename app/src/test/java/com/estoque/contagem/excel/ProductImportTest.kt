@@ -1,6 +1,7 @@
 package com.estoque.contagem.excel
 
 import com.estoque.contagem.data.CountEntry
+import com.estoque.contagem.data.MeasureUnit
 import com.estoque.contagem.data.Product
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -14,9 +15,9 @@ import java.util.zip.ZipOutputStream
 
 class ProductImportTest {
 
-    private fun product(name: String, qty: Long, countedAt: Long?): Product {
+    private fun product(name: String, qty: Double, countedAt: Long?, unit: MeasureUnit = MeasureUnit.UN): Product {
         val entries = if (countedAt != null) listOf(CountEntry(qty, qty, countedAt, false)) else emptyList()
-        return Product(name, name, "📦", 0, qty, entries, 0L)
+        return Product(name, name, "📦", 0, qty, entries, 0L, unit = unit)
     }
 
     @Test
@@ -26,9 +27,10 @@ class ProductImportTest {
             set(java.util.Calendar.MILLISECOND, 0)
         }.timeInMillis
         val original = listOf(
-            product("Coca 600", 18, countedAt),
-            product("Sabão em pó & amaciante", 15, countedAt),
-            product("Óleo de soja", 0, null)
+            product("Coca 600", 18.0, countedAt),
+            product("Sabão em pó & amaciante", 15.0, countedAt),
+            product("Óleo de soja", 0.0, null, MeasureUnit.L),
+            product("Queijo", 2.5, countedAt, MeasureUnit.KG)
         )
         val out = ByteArrayOutputStream()
         XlsxWriter.write(StockReport.build(original, countedAt, countedAt), out)
@@ -37,12 +39,13 @@ class ProductImportTest {
         assertEquals(listOf("Contagem", "Histórico"), sheets.keys.toList())
 
         val imported = ProductImport.parse(sheets)
-        assertEquals(listOf("Coca 600", "Óleo de soja", "Sabão em pó & amaciante"), imported.map { it.name })
-        assertEquals(listOf(18L, 0L, 15L), imported.map { it.quantity })
+        assertEquals(listOf("Coca 600", "Óleo de soja", "Queijo", "Sabão em pó & amaciante"), imported.map { it.name })
+        assertEquals(listOf(18.0, 0.0, 2.5, 15.0), imported.map { it.quantity })
+        assertEquals(listOf(MeasureUnit.UN, MeasureUnit.L, MeasureUnit.KG, MeasureUnit.UN), imported.map { it.unit })
         assertEquals(countedAt, imported[0].lastCountAt)
         assertNull(imported[1].lastCountAt) // "Não contado"
         assertEquals("🥤", imported[0].emoji)
-        assertEquals("🧼", imported[2].emoji)
+        assertEquals("🧼", imported[3].emoji)
         assertTrue(imported.none { it.name == "TOTAL" })
     }
 
@@ -78,10 +81,10 @@ class ProductImportTest {
         val imported = ProductImport.parse(XlsxReader.read(ByteArrayInputStream(bytes)))
         assertEquals(2, imported.size) // "Guaraná lata" repetido é ignorado
         assertEquals("Guaraná lata", imported[0].name)
-        assertEquals(4L, imported[0].quantity)
+        assertEquals(4.0, imported[0].quantity, 0.0)
         assertEquals(700L, imported[0].priceCents)
         assertEquals("Pipoca", imported[1].name)
-        assertEquals(0L, imported[1].quantity)
+        assertEquals(0.0, imported[1].quantity, 0.0)
         assertEquals(1500L, imported[1].priceCents)
     }
 

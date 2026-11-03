@@ -64,6 +64,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.estoque.contagem.data.MeasureUnit
 import com.estoque.contagem.data.PhotoChange
 import com.estoque.contagem.data.Product
 import com.estoque.contagem.excel.StockReport
@@ -95,7 +96,14 @@ fun HomeScreen(
     snackbarHostState: SnackbarHostState,
     exporting: Boolean,
     onOpenProduct: (String) -> Unit,
-    onAddProduct: (name: String, emoji: String, initialQuantity: Long, priceCents: Long, photo: PhotoChange) -> Boolean,
+    onAddProduct: (
+        name: String,
+        emoji: String,
+        initialQuantity: Double,
+        priceCents: Long,
+        photo: PhotoChange,
+        unit: MeasureUnit
+    ) -> Boolean,
     onExport: () -> Unit,
     onImport: () -> Unit,
     onNewCount: () -> Unit
@@ -211,8 +219,8 @@ fun HomeScreen(
             title = "Novo produto",
             askInitialQuantity = true,
             onDismiss = { showNewProduct = false },
-            onSave = { name, emoji, qty, price, photo ->
-                val ok = onAddProduct(name, emoji, qty, price, photo)
+            onSave = { name, emoji, qty, price, photo, unit ->
+                val ok = onAddProduct(name, emoji, qty, price, photo, unit)
                 if (ok) showNewProduct = false
                 ok
             }
@@ -452,7 +460,7 @@ private fun ProductCard(product: Product, onClick: () -> Unit) {
                     fontWeight = FontWeight.ExtraBold,
                     color = color
                 )
-                Text("unidades", fontSize = 12.sp, color = TextSecondary)
+                Text(product.unit.label(product.quantity), fontSize = 12.sp, color = TextSecondary)
             }
             Spacer(Modifier.width(10.dp))
             Box(

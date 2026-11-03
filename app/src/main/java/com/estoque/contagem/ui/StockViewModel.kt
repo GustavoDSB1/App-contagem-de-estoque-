@@ -14,7 +14,9 @@ import com.estoque.contagem.data.BackupException
 import com.estoque.contagem.data.BackupFormat
 import com.estoque.contagem.data.BackupPerson
 import com.estoque.contagem.data.BackupProduct
+import com.estoque.contagem.data.MeasureUnit
 import com.estoque.contagem.data.Person
+import com.estoque.contagem.data.Qty
 import com.estoque.contagem.data.PersonType
 import com.estoque.contagem.data.PhotoChange
 import com.estoque.contagem.data.ProductImages
@@ -49,7 +51,7 @@ data class UiState(
     val company: CompanySettings = CompanySettings(),
     val loaded: Boolean = false
 ) {
-    val totalItems: Long get() = products.sumOf { it.quantity }
+    val totalItems: Double get() = Qty.round(products.sumOf { it.quantity })
     val countedProducts: Int get() = products.count { it.wasCounted }
 }
 
@@ -58,7 +60,7 @@ data class ImportPreview(
     val newProducts: List<ImportedProduct>,
     val duplicates: Int
 ) {
-    val hasQuantities: Boolean get() = newProducts.any { it.quantity > 0 }
+    val hasQuantities: Boolean get() = newProducts.any { it.quantity > 0.0 }
     val hasPrices: Boolean get() = newProducts.any { it.priceCents > 0 }
 }
 
@@ -126,16 +128,18 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
         emoji: String,
         initialQuantity: Long,
         priceCents: Long,
-        photo: PhotoChange = PhotoChange.Keep
+        photo: PhotoChange = PhotoChange.Keep,
+        unit: MeasureUnit = MeasureUnit.UN
     ): Boolean {
         val clean = name.trim()
         if (clean.isEmpty() || nameTaken(clean)) return false
+        val initial = Qty.round(initialQuantity.coerceIn(0.0, Qty.MAX))
         val imageFile = (photo as? PhotoChange.New)?.let { savePhoto(it) }
         val now = System.currentTimeMillis()
         val products = _state.value.products
         val nextColor = ((products.maxOfOrNull { it.colorIndex } ?: -1) + 1) % ProductColors.size
-        val entries = if (initialQuantity > 0) {
-            listOf(CountEntry(initialQuantity, initialQuantity, now, isCorrection = false))
+        val entries = if (initial > 0.0) {
+            listOf(CountEntry(initial, initial, now, isCorrection = false))
         } else {
             emptyList()
         }
@@ -144,34 +148,44 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
             name = clean,
             emoji = emoji,
             colorIndex = nextColor,
-            quantity = initialQuantity,
+            quantity = initial,
             entries = entries,
             createdAt = now,
             priceCents = priceCents,
-            imageFile = imageFile
+            imageFile = imageFile,
+            unit = unit
         )
         update { it.copy(products = it.products + product) }
         return true
     }
 
-    fun addQuantity(id: String, amount: Long) {
-        if (amount <= 0) return
+    fun addQuantity(id: String, amount: Double) {
+        val added = Qty.round(amount)
+        if (added <= 0.0) return
         val now = System.currentTimeMillis()
         updateProduct(id) { p ->
-            val total = p.quantity + amount
-            p.copy(quantity = total, entries = p.entries + CountEntry(amount, total, now, isCorrection = false))
+            val total = Qty.round((p.quantity + added).coerceAtMost(Qty.MAX))
+            p.copy(quantity = total, entries = p.entries + CountEntry(added, total, now, isCorrection = false))
         }
     }
 
-    fun setQuantity(id: String, value: Long) {
-        if (value < 0) return
+    fun setQuantity(id: String, value: Double) {
+        if (value < 0.0) return
+        val total = Qty.round(value.coerceAtMost(Qty.MAX))
         val now = System.currentTimeMillis()
         updateProduct(id) { p ->
-            p.copy(quantity = value, entries = p.entries + CountEntry(value, value, now, isCorrection = true))
+            p.copy(quantity = total, entries = p.entries + CountEntry(total, total, now, isCorrection = true))
         }
     }
 
-    fun editProduct(id: String, name: String, emoji: String, priceCents: Long, photo: PhotoChange): Boolean {
+    fun editProduct(
+        id: String,
+        name: String,
+        emoji: String,
+        priceCents: Long,
+        photo: PhotoChange,
+        unit: MeasureUnit
+    ): Boolean {
         val clean = name.trim()
         if (clean.isEmpty() || nameTaken(clean, exceptId = id)) return false
         val oldImage = _state.value.products.firstOrNull { it.id == id }?.imageFile
@@ -181,7 +195,9 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
             is PhotoChange.New -> savePhoto(photo) ?: oldImage
         }
         if (newImage != oldImage) ProductImages.delete(getApplication(), oldImage)
-        updateProduct(id) { it.copy(name = clean, emoji = emoji, priceCents = priceCents, imageFile = newImage) }
+        updateProduct(id) {
+            it.copy(name = clean, emoji = emoji, priceCents = priceCents, imageFile = newImage, unit = unit)
+        }
         return true
     }
 
@@ -197,7 +213,7 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
     fun startNewCount() {
         update { s ->
             s.copy(
-                products = s.products.map { it.copy(quantity = 0, entries = emptyList()) },
+                products = s.products.map { it.copy(quantity = 0.0, entries = emptyList()) },
                 countStartedAt = System.currentTimeMillis()
             )
         }
@@ -260,8 +276,8 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
             val taken = s.products.map { it.name.trim().lowercase() }.toMutableSet()
             var color = (s.products.maxOfOrNull { it.colorIndex } ?: -1) + 1
             val newOnes = items.filter { taken.add(it.name.trim().lowercase()) }.map { item ->
-                val qty = if (withQuantities) item.quantity else 0L
-                val entries = if (qty > 0) {
+                val qty = if (withQuantities) item.quantity else 0.0
+                val entries = if (qty > 0.0) {
                     listOf(CountEntry(qty, qty, item.lastCountAt ?: now, isCorrection = false))
                 } else {
                     emptyList()
@@ -274,7 +290,8 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                     quantity = qty,
                     entries = entries,
                     createdAt = now,
-                    priceCents = item.priceCents
+                    priceCents = item.priceCents,
+                    unit = item.unit
                 )
             }
             added = newOnes.size
@@ -327,7 +344,7 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                         products = snapshot.products.map { p ->
                             BackupProduct(
                                 p.name, p.emoji, p.colorIndex, p.priceCents,
-                                ProductImages.readJpeg(app, p.imageFile), p.excludeFromExcel
+                                ProductImages.readJpeg(app, p.imageFile), p.excludeFromExcel, p.unit
                             )
                         },
                         people = snapshot.people.map { BackupPerson(it.name, it.type) },
@@ -419,12 +436,13 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                             name = b.name,
                             emoji = b.emoji,
                             colorIndex = Math.floorMod(b.colorIndex, ProductColors.size),
-                            quantity = 0,
+                            quantity = 0.0,
                             entries = emptyList(),
                             createdAt = now,
                             priceCents = b.priceCents,
                             imageFile = photo,
-                            excludeFromExcel = b.excludeFromExcel
+                            excludeFromExcel = b.excludeFromExcel,
+                            unit = b.unit
                         )
                         added += p
                         byName[key] = p

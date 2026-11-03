@@ -1,6 +1,7 @@
 package com.estoque.contagem.excel
 
 import com.estoque.contagem.data.Product
+import com.estoque.contagem.data.Qty
 import java.text.Collator
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -74,13 +75,26 @@ object StockReport {
     private fun shortDateTime(millis: Long): String =
         SimpleDateFormat("dd/MM/yyyy HH:mm", BR).format(Date(millis))
 
+    /** Número inteiro (#,##0) ou com casas decimais (#,##0.00) conforme a unidade/valor. */
+    private fun numberStyle(p: Product, alt: Boolean): CellStyle {
+        val decimal = p.unit.allowsDecimals || p.quantity != Math.rint(p.quantity) ||
+            p.entries.any { it.amount != Math.rint(it.amount) }
+        return when {
+            decimal && alt -> CellStyle.NUMBER_DEC_ALT
+            decimal -> CellStyle.NUMBER_DEC
+            alt -> CellStyle.NUMBER_ALT
+            else -> CellStyle.NUMBER
+        }
+    }
+
     private fun countSheet(
         products: List<Product>,
         countStartedAt: Long,
         generatedAt: Long,
         company: CompanyInfo
     ): Sheet {
-        val total = products.sumOf { it.quantity }
+        val total = Qty.round(products.sumOf { it.quantity })
+        val anyDecimal = products.any { it.unit.allowsDecimals || it.quantity != Math.rint(it.quantity) }
         val counted = products.count { it.wasCounted }
         val rows = mutableListOf<List<Cell?>>()
 
@@ -99,13 +113,13 @@ object StockReport {
         rows += listOf(Cell.Text("Contagem iniciada em: ${dateTime(countStartedAt)}", CellStyle.SUBTITLE))
         rows += listOf(
             Cell.Text(
-                "Produtos: ${products.size}   •   Contados: $counted   •   Itens no total: $total",
+                "Produtos: ${products.size}   •   Contados: $counted   •   Quantidade total: ${Qty.format(total)}",
                 CellStyle.SUBTITLE
             )
         )
         val infoRows = rows.size
         rows += emptyList<Cell?>()
-        rows += listOf("#", "Produto", "Quantidade", "Última contagem").map { Cell.Text(it, CellStyle.HEADER) }
+        rows += listOf("#", "Produto", "Quantidade", "Unidade", "Última contagem").map { Cell.Text(it, CellStyle.HEADER) }
         val headerRow = rows.size // número da linha do cabeçalho da tabela
 
         val firstDataRow = rows.size + 1 // número da linha no Excel (começa em 1)
@@ -114,7 +128,8 @@ object StockReport {
             rows += listOf(
                 Cell.Text("${i + 1}", if (alt) CellStyle.CENTER_ALT else CellStyle.CENTER),
                 Cell.Text(p.name, if (alt) CellStyle.TEXT_ALT else CellStyle.TEXT),
-                Cell.Number(p.quantity, if (alt) CellStyle.NUMBER_ALT else CellStyle.NUMBER),
+                Cell.Number(p.quantity, numberStyle(p, alt)),
+                Cell.Text(p.unit.code, if (alt) CellStyle.CENTER_ALT else CellStyle.CENTER),
                 p.lastCountAt?.let { Cell.Text(shortDateTime(it), if (alt) CellStyle.CENTER_ALT else CellStyle.CENTER) }
                     ?: Cell.Text("Não contado", if (alt) CellStyle.WARN_ALT else CellStyle.WARN)
             )
@@ -125,26 +140,33 @@ object StockReport {
             Cell.Blank(CellStyle.TOTAL_LABEL),
             Cell.Text("TOTAL", CellStyle.TOTAL_LABEL),
             if (products.isEmpty()) Cell.Number(0, CellStyle.TOTAL_NUMBER)
-            else Cell.Formula("SUM(C$firstDataRow:C$lastDataRow)", total),
+            else Cell.Formula(
+                "SUM(C$firstDataRow:C$lastDataRow)",
+                total,
+                if (anyDecimal) CellStyle.TOTAL_NUMBER_DEC else CellStyle.TOTAL_NUMBER
+            ),
+            Cell.Blank(CellStyle.TOTAL_LABEL),
             Cell.Blank(CellStyle.TOTAL_LABEL)
         )
 
         return Sheet(
             name = "Contagem",
-            columnWidths = listOf(6.0, 40.0, 16.0, 22.0),
+            columnWidths = listOf(6.0, 40.0, 14.0, 10.0, 22.0),
             rows = rows,
-            merges = (1..infoRows).map { "A$it:D$it" },
+            merges = (1..infoRows).map { "A$it:E$it" },
             rowHeights = mapOf(0 to 32.0, headerRow - 1 to 24.0),
             frozenRows = headerRow,
-            image = logoImage(company, column = 3, columnWidthChars = 22.0)
+            image = logoImage(company, column = 4, columnWidthChars = 22.0)
         )
     }
 
     private fun historySheet(products: List<Product>, generatedAt: Long, company: CompanyInfo): Sheet {
-        data class Line(val name: String, val entry: com.estoque.contagem.data.CountEntry)
+        data class Line(val product: Product, val entry: com.estoque.contagem.data.CountEntry) {
+            val name: String get() = product.name
+        }
 
         val lines = products
-            .flatMap { p -> p.entries.map { Line(p.name, it) } }
+            .flatMap { p -> p.entries.map { Line(p, it) } }
             .sortedBy { it.entry.timestamp }
 
         val rows = mutableListOf<List<Cell?>>()
@@ -152,12 +174,13 @@ object StockReport {
         val companyPrefix = company.name.trim().let { if (it.isEmpty()) "" else "$it • " }
         rows += listOf(Cell.Text("${companyPrefix}Gerado em: ${dateTime(generatedAt)}", CellStyle.SUBTITLE))
         rows += emptyList<Cell?>()
-        rows += listOf("Data e hora", "Produto", "Operação", "Quantidade", "Total após")
+        rows += listOf("Data e hora", "Produto", "Operação", "Quantidade", "Total após", "Unidade")
             .map { Cell.Text(it, CellStyle.HEADER) }
 
         if (lines.isEmpty()) {
             rows += listOf(
                 Cell.Text("Nenhum lançamento nesta contagem", CellStyle.TEXT),
+                Cell.Blank(CellStyle.TEXT),
                 Cell.Blank(CellStyle.TEXT),
                 Cell.Blank(CellStyle.TEXT),
                 Cell.Blank(CellStyle.TEXT),
@@ -172,19 +195,20 @@ object StockReport {
                 Cell.Text(line.name, if (alt) CellStyle.TEXT_ALT else CellStyle.TEXT),
                 if (e.isCorrection) Cell.Text("Corrigido", if (alt) CellStyle.WARN_ALT else CellStyle.WARN)
                 else Cell.Text("Somado", if (alt) CellStyle.GOOD_ALT else CellStyle.GOOD),
-                Cell.Number(e.amount, if (alt) CellStyle.NUMBER_ALT else CellStyle.NUMBER),
-                Cell.Number(e.totalAfter, if (alt) CellStyle.NUMBER_ALT else CellStyle.NUMBER)
+                Cell.Number(e.amount, numberStyle(line.product, alt)),
+                Cell.Number(e.totalAfter, numberStyle(line.product, alt)),
+                Cell.Text(line.product.unit.code, if (alt) CellStyle.CENTER_ALT else CellStyle.CENTER)
             )
         }
 
         return Sheet(
             name = "Histórico",
-            columnWidths = listOf(20.0, 40.0, 14.0, 14.0, 14.0),
+            columnWidths = listOf(20.0, 40.0, 14.0, 14.0, 14.0, 10.0),
             rows = rows,
-            merges = listOf("A1:E1", "A2:E2"),
+            merges = listOf("A1:F1", "A2:F2"),
             rowHeights = mapOf(0 to 32.0, 3 to 24.0),
             frozenRows = 4,
-            image = logoImage(company, column = 4, columnWidthChars = 14.0)
+            image = logoImage(company, column = 5, columnWidthChars = 10.0)
         )
     }
 }

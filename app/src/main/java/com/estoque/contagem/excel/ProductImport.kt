@@ -1,5 +1,7 @@
 package com.estoque.contagem.excel
 
+import com.estoque.contagem.data.MeasureUnit
+import com.estoque.contagem.data.Qty
 import java.text.Normalizer
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -9,10 +11,11 @@ import kotlin.math.roundToLong
 
 data class ImportedProduct(
     val name: String,
-    val quantity: Long,
+    val quantity: Double,
     val priceCents: Long,
     val lastCountAt: Long?,
-    val emoji: String
+    val emoji: String,
+    val unit: MeasureUnit = MeasureUnit.UN
 )
 
 class ImportException(message: String) : Exception(message)
@@ -34,6 +37,7 @@ object ProductImport {
         "valor", "preco", "valor de venda", "preco de venda", "valor unitario", "preco unitario", "r$"
     )
     private val DATE_HEADERS = setOf("ultima contagem", "data", "data da contagem")
+    private val UNIT_HEADERS = setOf("unidade", "un", "und", "unid", "medida", "unidade de medida")
 
     fun parse(sheets: Map<String, List<List<String>>>): List<ImportedProduct> {
         // Primeiro a aba "Contagem" (planilha do app), depois as outras na ordem.
@@ -55,6 +59,7 @@ object ProductImport {
         val qtyCol = header.indexOfFirst { it in QTY_HEADERS }
         val priceCol = header.indexOfFirst { it in PRICE_HEADERS }
         val dateCol = header.indexOfFirst { it in DATE_HEADERS }
+        val unitCol = header.indexOfFirst { it in UNIT_HEADERS }
 
         val seen = HashSet<String>()
         val products = mutableListOf<ImportedProduct>()
@@ -64,11 +69,12 @@ object ProductImport {
             if (!seen.add(normalize(name))) continue
             products += ImportedProduct(
                 name = name,
-                quantity = row.cell(qtyCol)?.let { parseNumber(it) }?.roundToLong()?.coerceIn(0, 9_999_999) ?: 0,
+                quantity = row.cell(qtyCol)?.let { parseNumber(it) }?.let { Qty.round(it.coerceIn(0.0, Qty.MAX)) } ?: 0.0,
                 priceCents = row.cell(priceCol)?.let { parseNumber(it) }?.let { (it * 100).roundToLong() }
                     ?.coerceIn(0, 999_999_999) ?: 0,
                 lastCountAt = row.cell(dateCol)?.let { parseDate(it) },
-                emoji = guessEmoji(name)
+                emoji = guessEmoji(name),
+                unit = MeasureUnit.fromText(row.cell(unitCol))
             )
         }
         return products

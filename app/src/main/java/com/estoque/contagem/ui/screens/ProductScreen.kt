@@ -56,14 +56,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.estoque.contagem.consumo.Money
+import com.estoque.contagem.data.MeasureUnit
 import com.estoque.contagem.data.PhotoChange
+import com.estoque.contagem.data.Qty
 import com.estoque.contagem.data.Product
 import com.estoque.contagem.ui.components.ConfirmDialog
 import com.estoque.contagem.ui.components.ProductAvatar
 import com.estoque.contagem.ui.components.ProductFormDialog
 import com.estoque.contagem.ui.formatQty
 import com.estoque.contagem.ui.formatWhen
-import com.estoque.contagem.ui.onlyDigits
 import com.estoque.contagem.ui.theme.DangerRed
 import com.estoque.contagem.ui.theme.SuccessBg
 import com.estoque.contagem.ui.theme.SuccessText
@@ -76,9 +77,9 @@ import com.estoque.contagem.ui.theme.productColor
 fun ProductScreen(
     product: Product,
     onBack: () -> Unit,
-    onAdd: (Long) -> Unit,
-    onSetTotal: (Long) -> Unit,
-    onEdit: (name: String, emoji: String, priceCents: Long, photo: PhotoChange) -> Boolean,
+    onAdd: (Double) -> Unit,
+    onSetTotal: (Double) -> Unit,
+    onEdit: (name: String, emoji: String, priceCents: Long, photo: PhotoChange, unit: MeasureUnit) -> Boolean,
     onExcludeFromExcel: (Boolean) -> Unit,
     onDelete: () -> Unit
 ) {
@@ -87,8 +88,9 @@ fun ProductScreen(
     var input by rememberSaveable { mutableStateOf("") }
     var showDelete by rememberSaveable { mutableStateOf(false) }
     var showEdit by rememberSaveable { mutableStateOf(false) }
-    val value = input.toLongOrNull()
-    val canSave = if (correcting) value != null else (value ?: 0L) > 0L
+    val unit = product.unit
+    val value = Qty.parse(input)
+    val canSave = if (correcting) value != null else (value ?: 0.0) > 0.0
     val save = {
         if (canSave && value != null) {
             if (correcting) onSetTotal(value) else onAdd(value)
@@ -177,13 +179,23 @@ fun ProductScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text("Quantidade atual", color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp)
-                    Text(
-                        formatQty(product.quantity),
-                        color = Color.White,
-                        fontSize = 52.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        lineHeight = 56.sp
-                    )
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            formatQty(product.quantity),
+                            color = Color.White,
+                            fontSize = 52.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            lineHeight = 56.sp
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            unit.label(product.quantity),
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
                 }
             }
 
@@ -212,7 +224,11 @@ fun ProductScreen(
 
                 Spacer(Modifier.height(20.dp))
                 Text(
-                    if (correcting) "Qual é a quantidade correta?" else "Quantas unidades você contou agora?",
+                    when {
+                        correcting -> "Qual é a quantidade correta (em ${unit.plural})?"
+                        unit == MeasureUnit.UN -> "Quantas unidades você contou agora?"
+                        else -> "Quanto você contou agora (em ${unit.plural})?"
+                    },
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -220,13 +236,17 @@ fun ProductScreen(
 
                 OutlinedTextField(
                     value = input,
-                    onValueChange = { input = it.onlyDigits() },
+                    onValueChange = { input = Qty.cleanInput(it, unit.allowsDecimals) },
                     placeholder = {
                         Text("0", fontSize = 40.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     },
                     singleLine = true,
                     textStyle = TextStyle(fontSize = 40.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = if (unit.allowsDecimals) KeyboardType.Decimal else KeyboardType.Number,
+                        imeAction = ImeAction.Done
+                    ),
+                    suffix = { Text(unit.code, fontSize = 20.sp, color = TextSecondary) },
                     keyboardActions = KeyboardActions(onDone = { save() }),
                     shape = RoundedCornerShape(20.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -241,15 +261,19 @@ fun ProductScreen(
                 Spacer(Modifier.height(12.dp))
                 // Botões rápidos
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    listOf(1L, 5L, 10L, 50L).forEach { n ->
+                    val steps = if (unit.allowsDecimals) listOf(0.5, 1.0, 5.0, 10.0) else listOf(1.0, 5.0, 10.0, 50.0)
+                    steps.forEach { n ->
                         OutlinedButton(
-                            onClick = { input = ((input.toLongOrNull() ?: 0L) + n).coerceAtMost(9_999_999L).toString() },
+                            onClick = {
+                                val next = Qty.round(((Qty.parse(input) ?: 0.0) + n).coerceAtMost(Qty.MAX))
+                                input = Qty.toInput(next)
+                            },
                             shape = RoundedCornerShape(14.dp),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
                             modifier = Modifier
                                 .weight(1f)
                                 .height(48.dp)
-                        ) { Text("+$n", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = color) }
+                        ) { Text("+${formatQty(n)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = color) }
                     }
                 }
 
@@ -257,9 +281,9 @@ fun ProductScreen(
                 if (value != null && canSave) {
                     Spacer(Modifier.height(16.dp))
                     val preview = if (correcting) {
-                        "${formatQty(product.quantity)}  ➜  ${formatQty(value)}"
+                        "${formatQty(product.quantity)}  ➜  ${formatQty(value)} ${unit.code}"
                     } else {
-                        "${formatQty(product.quantity)} + ${formatQty(value)} = ${formatQty(product.quantity + value)}"
+                        "${formatQty(product.quantity)} + ${formatQty(value)} = ${formatQty(product.quantity + value)} ${unit.code}"
                     }
                     Text(
                         preview,
@@ -359,10 +383,11 @@ fun ProductScreen(
             initialEmoji = product.emoji,
             initialPriceCents = product.priceCents,
             initialImageFile = product.imageFile,
+            initialUnit = product.unit,
             askInitialQuantity = false,
             onDismiss = { showEdit = false },
-            onSave = { name, emoji, _, price, photo ->
-                val ok = onEdit(name, emoji, price, photo)
+            onSave = { name, emoji, _, price, photo, newUnit ->
+                val ok = onEdit(name, emoji, price, photo, newUnit)
                 if (ok) showEdit = false
                 ok
             }

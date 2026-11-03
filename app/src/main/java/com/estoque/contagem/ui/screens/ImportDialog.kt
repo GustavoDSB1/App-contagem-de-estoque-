@@ -85,7 +85,7 @@ fun ImportDialog(
                                     modifier = Modifier.weight(1f)
                                 )
                                 if (withQuantities && item.quantity > 0) {
-                                    Text(formatQty(item.quantity), fontWeight = FontWeight.Bold)
+                                    Text("${formatQty(item.quantity)} ${item.unit.code}", fontWeight = FontWeight.Bold)
                                 }
                                 if (item.priceCents > 0) {
                                     Spacer(Modifier.width(8.dp))

@@ -6,6 +6,8 @@ Aplicativo Android simples e visual para contar estoque e gerar uma planilha Exc
 
 - **Cadastrar produtos** com nome e um ícone (🥤 🍞 🧴 ...) **ou uma foto** (galeria ou câmera; recortada
   em círculo automaticamente). Pode já informar a quantidade contada.
+- **Unidades de medida** por produto (unidade, kg, g, litros, ml, caixas, pacotes, fardos, dúzias, metros),
+  com **casas decimais** onde faz sentido (ex.: 2,5 kg). A planilha tem a coluna Unidade.
 - **Somar quantidades**: toque no produto, digite quanto contou e salve. Na próxima vez o valor é
   **somado** ao que já existe (ex.: 12 + 5 = 17). Botões rápidos `+1`, `+5`, `+10`, `+50`.
 - **Corrigir o total** caso tenha contado errado.
@@ -103,6 +105,7 @@ app/src/main/java/com/estoque/contagem/
 │   ├── Consumption.kt           # Baixa de consumo (funcionário/diarista)
 │   ├── Person.kt                # Funcionário/diarista cadastrado
 │   ├── Company.kt               # Dados da empresa (nome, CNPJ, logo)
+│   ├── MeasureUnit.kt           # Unidades de medida e quantidades decimais
 │   ├── Backup.kt                # Formato do arquivo de backup
 │   ├── ProductImages.kt         # Fotos dos produtos (recorte, tamanho, cache)
 │   └── ProductRepository.kt     # Salva/carrega os dados (JSON no celular)

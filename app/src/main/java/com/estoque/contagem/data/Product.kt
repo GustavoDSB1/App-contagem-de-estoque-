@@ -2,8 +2,8 @@ package com.estoque.contagem.data
 
 /** Um lançamento feito na contagem: somou unidades ou corrigiu o total. */
 data class CountEntry(
-    val amount: Long,
-    val totalAfter: Long,
+    val amount: Double,
+    val totalAfter: Double,
     val timestamp: Long,
     val isCorrection: Boolean
 )
@@ -13,7 +13,7 @@ data class Product(
     val name: String,
     val emoji: String,
     val colorIndex: Int,
-    val quantity: Long,
+    val quantity: Double,
     val entries: List<CountEntry>,
     val createdAt: Long,
     /** Valor de venda em centavos (usado só na aba Consumo, não vai para o Excel). */
@@ -21,7 +21,8 @@ data class Product(
     /** Nome do arquivo da foto (em filesDir/fotos). Sem foto, usa o [emoji]. */
     val imageFile: String? = null,
     /** Na lista de exclusão: continua no app, mas não vai para a planilha Excel de contagem. */
-    val excludeFromExcel: Boolean = false
+    val excludeFromExcel: Boolean = false,
+    val unit: MeasureUnit = MeasureUnit.UN
 ) {
     val wasCounted: Boolean get() = entries.isNotEmpty()
     val lastCountAt: Long? get() = entries.lastOrNull()?.timestamp

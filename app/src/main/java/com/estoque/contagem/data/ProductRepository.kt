@@ -54,6 +54,7 @@ class ProductRepository(context: Context) {
                     .put("priceCents", p.priceCents)
                     .put("image", p.imageFile ?: JSONObject.NULL)
                     .put("excludeFromExcel", p.excludeFromExcel)
+                    .put("unit", p.unit.code)
                     .put("entries", entries)
             )
         }
@@ -99,8 +100,8 @@ class ProductRepository(context: Context) {
             val entries = (0 until entriesArr.length()).map { j ->
                 val e = entriesArr.getJSONObject(j)
                 CountEntry(
-                    amount = e.getLong("amount"),
-                    totalAfter = e.getLong("totalAfter"),
+                    amount = e.getDouble("amount"),
+                    totalAfter = e.getDouble("totalAfter"),
                     timestamp = e.getLong("timestamp"),
                     isCorrection = e.optBoolean("isCorrection", false)
                 )
@@ -110,12 +111,13 @@ class ProductRepository(context: Context) {
                 name = o.getString("name"),
                 emoji = o.optString("emoji", "📦"),
                 colorIndex = o.optInt("colorIndex", 0),
-                quantity = o.optLong("quantity", 0),
+                quantity = o.optDouble("quantity", 0.0),
                 entries = entries,
                 createdAt = o.optLong("createdAt", System.currentTimeMillis()),
                 priceCents = o.optLong("priceCents", 0),
                 imageFile = if (o.isNull("image")) null else o.optString("image").ifBlank { null },
-                excludeFromExcel = o.optBoolean("excludeFromExcel", false)
+                excludeFromExcel = o.optBoolean("excludeFromExcel", false),
+                unit = MeasureUnit.fromText(o.optString("unit"))
             )
         }
         val consArr = json.optJSONArray("consumptions") ?: JSONArray()

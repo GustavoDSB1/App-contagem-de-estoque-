@@ -57,7 +57,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.estoque.contagem.consumo.Money
+import com.estoque.contagem.data.MeasureUnit
 import com.estoque.contagem.data.PersonType
+import com.estoque.contagem.data.Qty
 import com.estoque.contagem.data.PhotoChange
 import com.estoque.contagem.data.Product
 import com.estoque.contagem.data.ProductImages
@@ -65,7 +67,6 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.estoque.contagem.ui.onlyDigits
 import com.estoque.contagem.ui.theme.productColor
 
 val ProductEmojis = listOf(
@@ -133,6 +134,22 @@ fun StatusPill(text: String, background: Color, content: Color) {
             .background(background)
             .padding(horizontal = 10.dp, vertical = 4.dp)
     )
+}
+
+/** Escolha da unidade de medida (un, kg, L, cx...). */
+@Composable
+fun UnitPicker(selected: MeasureUnit, onSelect: (MeasureUnit) -> Unit) {
+    androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        items(MeasureUnit.entries.size) { i ->
+            val u = MeasureUnit.entries[i]
+            androidx.compose.material3.FilterChip(
+                selected = u == selected,
+                onClick = { onSelect(u) },
+                label = { Text(if (u.plural == u.code) u.code else "${u.plural} (${u.code})") },
+                shape = RoundedCornerShape(50)
+            )
+        }
+    }
 }
 
 /**
@@ -205,10 +222,19 @@ fun ProductFormDialog(
     initialEmoji: String = ProductEmojis.first(),
     initialPriceCents: Long = 0,
     initialImageFile: String? = null,
+    initialUnit: MeasureUnit = MeasureUnit.UN,
     askInitialQuantity: Boolean,
     onDismiss: () -> Unit,
-    onSave: (name: String, emoji: String, initialQuantity: Long, priceCents: Long, photo: PhotoChange) -> Boolean
+    onSave: (
+        name: String,
+        emoji: String,
+        initialQuantity: Double,
+        priceCents: Long,
+        photo: PhotoChange,
+        unit: MeasureUnit
+    ) -> Boolean
 ) {
+    var unit by remember { mutableStateOf(initialUnit) }
     var name by remember { mutableStateOf(initialName) }
     var emoji by remember { mutableStateOf(initialEmoji) }
     var quantity by remember { mutableStateOf("") }
@@ -345,6 +371,16 @@ fun ProductFormDialog(
                     onSelect = { emoji = it; clearPhoto() }
                 )
                 Spacer(Modifier.height(16.dp))
+                Text("Como é contado?", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                UnitPicker(
+                    selected = unit,
+                    onSelect = {
+                        unit = it
+                        if (!it.allowsDecimals) quantity = quantity.substringBefore(',')
+                    }
+                )
+                Spacer(Modifier.height(16.dp))
                 MoneyField(
                     cents = priceCents,
                     onChange = { priceCents = it },
@@ -360,12 +396,13 @@ fun ProductFormDialog(
                     Spacer(Modifier.height(16.dp))
                     OutlinedTextField(
                         value = quantity,
-                        onValueChange = { quantity = it.onlyDigits() },
+                        onValueChange = { quantity = Qty.cleanInput(it, unit.allowsDecimals) },
                         label = { Text("Quantidade já contada (opcional)") },
+                        suffix = { Text(unit.code) },
                         placeholder = { Text("0") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number,
+                            keyboardType = if (unit.allowsDecimals) KeyboardType.Decimal else KeyboardType.Number,
                             imeAction = ImeAction.Done
                         ),
                         textStyle = MaterialTheme.typography.titleLarge.copy(textAlign = TextAlign.Center),
@@ -379,7 +416,7 @@ fun ProductFormDialog(
             Button(
                 enabled = name.isNotBlank() && !processing,
                 onClick = {
-                    val ok = onSave(name.trim(), emoji, quantity.toLongOrNull() ?: 0L, priceCents, photo)
+                    val ok = onSave(name.trim(), emoji, Qty.parse(quantity) ?: 0.0, priceCents, photo, unit)
                     if (!ok) duplicate = true
                 },
                 shape = RoundedCornerShape(12.dp)

@@ -11,6 +11,9 @@ private val BR: Locale = Locale.forLanguageTag("pt-BR")
 
 fun formatQty(value: Long): String = NumberFormat.getIntegerInstance(BR).format(value)
 
+/** Quantidade com até 3 casas decimais: 12 -> "12"; 2.5 -> "2,5". */
+fun formatQty(value: Double): String = com.estoque.contagem.data.Qty.format(value)
+
 fun formatDate(millis: Long): String = SimpleDateFormat("dd/MM/yyyy", BR).format(Date(millis))
 
 fun formatTime(millis: Long): String = SimpleDateFormat("HH:mm", BR).format(Date(millis))

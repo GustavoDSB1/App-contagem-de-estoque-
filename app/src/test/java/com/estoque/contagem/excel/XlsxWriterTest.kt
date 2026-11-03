@@ -1,6 +1,7 @@
 package com.estoque.contagem.excel
 
 import com.estoque.contagem.data.CountEntry
+import com.estoque.contagem.data.MeasureUnit
 import com.estoque.contagem.data.Product
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -11,13 +12,48 @@ import java.util.zip.ZipInputStream
 
 class XlsxWriterTest {
 
-    private fun product(name: String, vararg amounts: Long): Product {
-        var total = 0L
+    private fun product(name: String, vararg amounts: Long): Product =
+        productDec(name, *amounts.map { it.toDouble() }.toDoubleArray())
+
+    private fun productDec(name: String, vararg amounts: Double, unit: MeasureUnit = MeasureUnit.UN): Product {
+        var total = 0.0
         val entries = amounts.mapIndexed { i, a ->
             total += a
             CountEntry(a, total, 1_700_000_000_000L + i * 60_000L, isCorrection = false)
         }
-        return Product(name, name, "📦", 0, total, entries, 1_700_000_000_000L)
+        return Product(name, name, "📦", 0, total, entries, 1_700_000_000_000L, unit = unit)
+    }
+
+    @Test
+    fun decimalQuantitiesAndUnitColumn() {
+        val sheets = StockReport.build(
+            listOf(productDec("Queijo", 1.25, 0.5, unit = MeasureUnit.KG), product("Arroz", 10)),
+            1_700_000_000_000L, 1_700_000_500_000L
+        )
+        val out = ByteArrayOutputStream()
+        XlsxWriter.write(sheets, out)
+        val files = unzip(out.toByteArray())
+        val count = files.getValue("xl/worksheets/sheet1.xml")
+        val decStyle = CellStyle.NUMBER_DEC.ordinal
+        val decAltStyle = CellStyle.NUMBER_DEC_ALT.ordinal
+        // Queijo (2ª linha, alternada) com 1,75 kg em formato decimal; Arroz inteiro
+        assertTrue(count.contains("s=\"$decAltStyle\"><v>1.75</v>") || count.contains("s=\"$decStyle\"><v>1.75</v>"))
+        assertTrue(count.contains("<v>10</v>"))
+        assertTrue(count.contains(">kg<"))
+        assertTrue(count.contains(">Unidade<"))
+        // Total soma decimais e usa formato decimal
+        assertTrue(count.contains("<f>SUM(C7:C8)</f><v>11.75</v>"))
+        // Estilo decimal usa o formato #,##0.00 (numFmtId 4)
+        assertTrue(files.getValue("xl/styles.xml").contains("numFmtId=\"4\""))
+        assertTrue(files.getValue("xl/worksheets/sheet2.xml").contains("<v>0.5</v>"))
+    }
+
+    @Test
+    fun numberTextHasNoScientificNotation() {
+        assertEquals("12", XlsxWriter.numberText(12.0))
+        assertEquals("2.5", XlsxWriter.numberText(2.5))
+        assertEquals("0.001", XlsxWriter.numberText(0.001))
+        assertEquals("9999999", XlsxWriter.numberText(9_999_999.0))
     }
 
     private fun unzip(bytes: ByteArray): Map<String, String> {

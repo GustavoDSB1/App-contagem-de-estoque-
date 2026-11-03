@@ -31,17 +31,23 @@ enum class CellStyle(
     GOOD(7, 0, 1, hAlign = "center"),
     GOOD_ALT(7, 3, 1, hAlign = "center"),
     TOTAL_LABEL(4, 4, 1),
-    TOTAL_NUMBER(4, 4, 1, numFmt = 3, hAlign = "center")
+    TOTAL_NUMBER(4, 4, 1, numFmt = 3, hAlign = "center"),
+    // Com casas decimais (#,##0.00) para kg, litros etc.
+    NUMBER_DEC(4, 0, 1, numFmt = 4, hAlign = "center"),
+    NUMBER_DEC_ALT(4, 3, 1, numFmt = 4, hAlign = "center"),
+    TOTAL_NUMBER_DEC(4, 4, 1, numFmt = 4, hAlign = "center")
 }
 
 sealed class Cell {
     abstract val style: CellStyle
 
     data class Text(val value: String, override val style: CellStyle = CellStyle.TEXT) : Cell()
-    data class Number(val value: Long, override val style: CellStyle = CellStyle.NUMBER) : Cell()
+    data class Number(val value: Double, override val style: CellStyle = CellStyle.NUMBER) : Cell() {
+        constructor(value: Long, style: CellStyle = CellStyle.NUMBER) : this(value.toDouble(), style)
+    }
     data class Formula(
         val formula: String,
-        val cachedValue: Long,
+        val cachedValue: Double,
         override val style: CellStyle = CellStyle.TOTAL_NUMBER
     ) : Cell()
     data class Blank(override val style: CellStyle) : Cell()
@@ -299,11 +305,16 @@ object XlsxWriter {
         return when (cell) {
             is Cell.Text ->
                 "<c r=\"$ref\" s=\"$s\" t=\"inlineStr\"><is><t xml:space=\"preserve\">${escape(cell.value)}</t></is></c>"
-            is Cell.Number -> "<c r=\"$ref\" s=\"$s\"><v>${cell.value}</v></c>"
-            is Cell.Formula -> "<c r=\"$ref\" s=\"$s\"><f>${escape(cell.formula)}</f><v>${cell.cachedValue}</v></c>"
+            is Cell.Number -> "<c r=\"$ref\" s=\"$s\"><v>${numberText(cell.value)}</v></c>"
+            is Cell.Formula -> "<c r=\"$ref\" s=\"$s\"><f>${escape(cell.formula)}</f><v>${numberText(cell.cachedValue)}</v></c>"
             is Cell.Blank -> "<c r=\"$ref\" s=\"$s\"/>"
         }
     }
+
+    /** Número no formato do XML: 12 -> "12", 2.5 -> "2.5" (sem notação científica). */
+    fun numberText(value: Double): String =
+        if (value == Math.rint(value) && kotlin.math.abs(value) < 1e15) value.toLong().toString()
+        else java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
 
     /** Nome de aba válido: até 31 caracteres e sem : \ / ? * [ ] */
     private fun sheetName(name: String): String =
