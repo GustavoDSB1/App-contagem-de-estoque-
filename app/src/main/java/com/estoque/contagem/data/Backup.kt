@@ -17,10 +17,18 @@ data class BackupProduct(
 
 data class BackupPerson(val name: String, val type: PersonType)
 
+data class BackupCompany(
+    val name: String,
+    val document: String,
+    /** Logo em PNG (opcional). */
+    val logoPng: ByteArray? = null
+)
+
 data class BackupData(
     val products: List<BackupProduct>,
     val people: List<BackupPerson>,
-    val createdAt: Long
+    val createdAt: Long,
+    val company: BackupCompany? = null
 )
 
 class BackupException(message: String) : Exception(message)
@@ -52,13 +60,22 @@ object BackupFormat {
         data.people.forEach { person ->
             people.put(JSONObject().put("nome", person.name).put("tipo", person.type.name))
         }
-        return JSONObject()
+        val json = JSONObject()
             .put("tipo", KIND)
             .put("versao", VERSION)
             .put("criadoEm", data.createdAt)
             .put("produtos", products)
             .put("pessoas", people)
-            .toString()
+        data.company?.let { c ->
+            json.put(
+                "empresa",
+                JSONObject()
+                    .put("nome", c.name)
+                    .put("documento", c.document)
+                    .put("logo", c.logoPng?.let { Base64.getEncoder().encodeToString(it) } ?: JSONObject.NULL)
+            )
+        }
+        return json.toString()
     }
 
     fun decode(text: String): BackupData {
@@ -91,6 +108,14 @@ object BackupFormat {
             val type = PersonType.entries.firstOrNull { it.name == o.optString("tipo") }
             if (name.isEmpty() || type == null) null else BackupPerson(name, type)
         }
-        return BackupData(products, people, json.optLong("criadoEm", 0))
+        val company = json.optJSONObject("empresa")?.let { o ->
+            BackupCompany(
+                name = o.optString("nome").trim().take(60),
+                document = o.optString("documento").trim().take(30),
+                logoPng = if (o.isNull("logo")) null
+                else runCatching { Base64.getDecoder().decode(o.getString("logo")) }.getOrNull()
+            )
+        }
+        return BackupData(products, people, json.optLong("criadoEm", 0), company)
     }
 }

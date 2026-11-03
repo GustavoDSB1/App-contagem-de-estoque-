@@ -40,6 +40,8 @@ Aplicativo Android simples e visual para contar estoque e gerar uma planilha Exc
      Leonardo 1 guaraná lata 7,00
      ```
 - **Aba ⚙️ Mais**:
+  - **🏢 Sua empresa**: nome, CNPJ/CPF e logo, que aparecem no topo do app e no cabeçalho da planilha
+    (o logo vai embutido no arquivo Excel).
   - Cadastro de **funcionários** e **diaristas** (adicionar/remover).
   - **Backup para outro celular**: exporta um arquivo `.json` com produtos, preços, ícones/fotos,
     funcionários e diaristas (sem contagem e sem baixas). No outro celular: ⚙️ Mais → Importar backup.
@@ -100,6 +102,7 @@ app/src/main/java/com/estoque/contagem/
 │   ├── Product.kt               # Produto e lançamentos da contagem
 │   ├── Consumption.kt           # Baixa de consumo (funcionário/diarista)
 │   ├── Person.kt                # Funcionário/diarista cadastrado
+│   ├── Company.kt               # Dados da empresa (nome, CNPJ, logo)
 │   ├── Backup.kt                # Formato do arquivo de backup
 │   ├── ProductImages.kt         # Fotos dos produtos (recorte, tamanho, cache)
 │   └── ProductRepository.kt     # Salva/carrega os dados (JSON no celular)

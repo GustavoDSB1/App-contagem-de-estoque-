@@ -50,6 +50,43 @@ class XlsxWriterTest {
         assertTrue(!files.getValue("xl/worksheets/sheet2.xml").contains("Coca"))
     }
 
+    private fun tinyPng(width: Int, height: Int): ByteArray {
+        val img = java.awt.image.BufferedImage(width, height, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+        val out = ByteArrayOutputStream()
+        javax.imageio.ImageIO.write(img, "png", out)
+        return out.toByteArray()
+    }
+
+    @Test
+    fun companyHeaderAndLogo() {
+        val logo = tinyPng(200, 100)
+        assertEquals(200 to 100, StockReport.pngSize(logo))
+
+        val sheets = StockReport.build(
+            listOf(product("Arroz", 10), product("Feijão", 3)),
+            1_700_000_000_000L, 1_700_000_500_000L,
+            CompanyInfo(name = "Mercadinho Bom Preço", document = "12.345.678/0001-90", logoPng = logo)
+        )
+        val out = ByteArrayOutputStream()
+        XlsxWriter.write(sheets, out)
+        val files = unzip(out.toByteArray())
+
+        val count = files.getValue("xl/worksheets/sheet1.xml")
+        assertTrue(count.contains("Mercadinho Bom Preço"))
+        assertTrue(count.contains("CNPJ/CPF: 12.345.678/0001-90"))
+        // Linha extra do CNPJ: cabeçalho na linha 7, dados a partir da 8
+        assertTrue(count.contains("<f>SUM(C8:C9)</f><v>13</v>"))
+        assertTrue(count.contains("ySplit=\"7\""))
+        assertTrue(count.contains("<drawing r:id=\"rId1\"/>"))
+
+        assertTrue(files.containsKey("xl/media/image1.png"))
+        assertTrue(files.containsKey("xl/drawings/drawing1.xml"))
+        assertTrue(files.containsKey("xl/worksheets/_rels/sheet1.xml.rels"))
+        // Logo reduzido para 56 px de altura mantendo a proporção (112 x 56)
+        assertTrue(files.getValue("xl/drawings/drawing1.xml").contains("cx=\"${112 * 9525}\" cy=\"${56 * 9525}\""))
+        assertTrue(files.getValue("[Content_Types].xml").contains("Extension=\"png\""))
+    }
+
     @Test
     fun columnNames() {
         assertEquals("A", XlsxWriter.columnName(0))

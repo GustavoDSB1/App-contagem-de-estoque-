@@ -17,7 +17,8 @@ class BackupFormatTest {
                 BackupProduct("Pipoca \"doce\"", "🍬", 2, 1500, null)
             ),
             people = listOf(BackupPerson("Ricardo", PersonType.EMPLOYEE), BackupPerson("Andressa", PersonType.DAY_WORKER)),
-            createdAt = 123L
+            createdAt = 123L,
+            company = BackupCompany("Mercadinho Bom Preço", "12.345.678/0001-90", byteArrayOf(9, 8, 7))
         )
         val decoded = BackupFormat.decode(BackupFormat.encode(original))
 
@@ -29,6 +30,9 @@ class BackupFormatTest {
         assertNull(decoded.products[1].photoJpeg)
         assertEquals(original.people, decoded.people)
         assertEquals(123L, decoded.createdAt)
+        assertEquals("Mercadinho Bom Preço", decoded.company?.name)
+        assertEquals("12.345.678/0001-90", decoded.company?.document)
+        assertArrayEquals(byteArrayOf(9, 8, 7), decoded.company?.logoPng)
     }
 
     @Test

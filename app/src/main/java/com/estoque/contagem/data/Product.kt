@@ -32,5 +32,6 @@ data class StockData(
     val products: List<Product>,
     val countStartedAt: Long,
     val consumptions: List<Consumption> = emptyList(),
-    val people: List<Person> = emptyList()
+    val people: List<Person> = emptyList(),
+    val company: CompanySettings = CompanySettings()
 )

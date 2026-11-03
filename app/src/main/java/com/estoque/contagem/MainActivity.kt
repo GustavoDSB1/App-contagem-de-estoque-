@@ -262,6 +262,10 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
                             onSetExcludedFromExcel = { ids ->
                                 vm.setExcludedFromExcel(ids)
                                 notify("✅ Lista salva: ${ids.size} produto(s) fora da planilha")
+                            },
+                            onSaveCompany = { name, document, logo ->
+                                vm.updateCompany(name, document, logo)
+                                notify("✅ Dados da empresa salvos")
                             }
                         )
                     }

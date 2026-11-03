@@ -32,11 +32,18 @@ object ExcelExporter {
         context: Context,
         products: List<Product>,
         countStartedAt: Long,
+        company: CompanyInfo = CompanyInfo(),
         now: Long = System.currentTimeMillis()
     ): ExportResult {
-        val sheets = StockReport.build(products, countStartedAt, now)
+        val sheets = StockReport.build(products, countStartedAt, now, company)
         val stamp = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.US).format(Date(now))
-        val fileName = "Contagem_Estoque_$stamp.xlsx"
+        // Nome da empresa no arquivo, só com letras e números (ex.: Contagem_Mercadinho_Bom_Preco_2026-...)
+        val companyPart = java.text.Normalizer.normalize(company.name, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^A-Za-z0-9]+"), "_")
+            .trim('_')
+            .take(30)
+        val fileName = if (companyPart.isEmpty()) "Contagem_Estoque_$stamp.xlsx" else "Contagem_${companyPart}_$stamp.xlsx"
 
         val dir = File(context.cacheDir, "planilhas").apply {
             mkdirs()

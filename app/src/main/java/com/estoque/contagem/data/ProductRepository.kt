@@ -82,6 +82,13 @@ class ProductRepository(context: Context) {
             .put("products", products)
             .put("consumptions", consumptions)
             .put("people", people)
+            .put(
+                "company",
+                JSONObject()
+                    .put("name", data.company.name)
+                    .put("document", data.company.document)
+                    .put("logo", data.company.logoFile ?: JSONObject.NULL)
+            )
     }
 
     private fun fromJson(json: JSONObject): StockData {
@@ -133,11 +140,18 @@ class ProductRepository(context: Context) {
             val type = PersonType.entries.firstOrNull { it.name == o.optString("type") } ?: return@mapNotNull null
             Person(o.getString("id"), o.getString("name"), type)
         }
+        val companyJson = json.optJSONObject("company")
+        val company = if (companyJson == null) CompanySettings() else CompanySettings(
+            name = companyJson.optString("name"),
+            document = companyJson.optString("document"),
+            logoFile = if (companyJson.isNull("logo")) null else companyJson.optString("logo").ifBlank { null }
+        )
         return StockData(
             products,
             json.optLong("countStartedAt", System.currentTimeMillis()),
             consumptions,
-            people
+            people,
+            company
         )
     }
 }

@@ -47,6 +47,19 @@ sealed class Cell {
     data class Blank(override val style: CellStyle) : Cell()
 }
 
+/** Imagem (ex.: logo da empresa) posicionada sobre a aba. Tamanho em pixels. */
+data class SheetImage(
+    val bytes: ByteArray,
+    /** "png" ou "jpeg" */
+    val extension: String,
+    val column: Int,
+    val row: Int,
+    val widthPx: Int,
+    val heightPx: Int,
+    val offsetXPx: Int = 0,
+    val offsetYPx: Int = 0
+)
+
 data class Sheet(
     val name: String,
     val columnWidths: List<Double>,
@@ -57,7 +70,8 @@ data class Sheet(
     /** Altura personalizada por linha (índice começando em 0). */
     val rowHeights: Map<Int, Double> = emptyMap(),
     /** Quantidade de linhas fixas no topo ao rolar. */
-    val frozenRows: Int = 0
+    val frozenRows: Int = 0,
+    val image: SheetImage? = null
 )
 
 /**
@@ -69,12 +83,27 @@ object XlsxWriter {
     fun write(sheets: List<Sheet>, out: OutputStream) {
         require(sheets.isNotEmpty()) { "A planilha precisa de pelo menos uma aba" }
         val zip = ZipOutputStream(out)
-        zip.put("[Content_Types].xml", contentTypes(sheets.size))
+        zip.put("[Content_Types].xml", contentTypes(sheets))
         zip.put("_rels/.rels", rootRels())
         zip.put("xl/workbook.xml", workbook(sheets))
         zip.put("xl/_rels/workbook.xml.rels", workbookRels(sheets.size))
         zip.put("xl/styles.xml", styles())
-        sheets.forEachIndexed { i, sheet -> zip.put("xl/worksheets/sheet${i + 1}.xml", worksheet(sheet)) }
+        sheets.forEachIndexed { i, sheet ->
+            val n = i + 1
+            zip.put("xl/worksheets/sheet$n.xml", worksheet(sheet))
+            sheet.image?.let { img ->
+                zip.putBytes("xl/media/image$n.${img.extension}", img.bytes)
+                zip.put("xl/drawings/drawing$n.xml", drawing(img))
+                zip.put(
+                    "xl/drawings/_rels/drawing$n.xml.rels",
+                    relationships("rId1", "$NS_REL/image", "../media/image$n.${img.extension}")
+                )
+                zip.put(
+                    "xl/worksheets/_rels/sheet$n.xml.rels",
+                    relationships("rId1", "$NS_REL/drawing", "../drawings/drawing$n.xml")
+                )
+            }
+        }
         zip.finish()
         zip.flush()
     }
@@ -91,21 +120,57 @@ object XlsxWriter {
         return sb.reverse().toString()
     }
 
-    private fun ZipOutputStream.put(path: String, content: String) {
+    private fun ZipOutputStream.put(path: String, content: String) = putBytes(path, content.toByteArray(Charsets.UTF_8))
+
+    private fun ZipOutputStream.putBytes(path: String, bytes: ByteArray) {
         putNextEntry(ZipEntry(path))
-        write(content.toByteArray(Charsets.UTF_8))
+        write(bytes)
         closeEntry()
+    }
+
+    private fun relationships(id: String, type: String, target: String) = HEADER +
+        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+        "<Relationship Id=\"$id\" Type=\"$type\" Target=\"$target\"/>" +
+        "</Relationships>"
+
+    private const val EMU_PER_PX = 9525L
+
+    private fun drawing(img: SheetImage): String {
+        val cx = img.widthPx * EMU_PER_PX
+        val cy = img.heightPx * EMU_PER_PX
+        return HEADER +
+            "<xdr:wsDr xmlns:xdr=\"http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing\" " +
+            "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"$NS_REL\">" +
+            "<xdr:oneCellAnchor>" +
+            "<xdr:from><xdr:col>${img.column}</xdr:col><xdr:colOff>${img.offsetXPx * EMU_PER_PX}</xdr:colOff>" +
+            "<xdr:row>${img.row}</xdr:row><xdr:rowOff>${img.offsetYPx * EMU_PER_PX}</xdr:rowOff></xdr:from>" +
+            "<xdr:ext cx=\"$cx\" cy=\"$cy\"/>" +
+            "<xdr:pic><xdr:nvPicPr><xdr:cNvPr id=\"2\" name=\"Logo\"/>" +
+            "<xdr:cNvPicPr><a:picLocks noChangeAspect=\"1\"/></xdr:cNvPicPr></xdr:nvPicPr>" +
+            "<xdr:blipFill><a:blip r:embed=\"rId1\"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>" +
+            "<xdr:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"$cx\" cy=\"$cy\"/></a:xfrm>" +
+            "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>" +
+            "<xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>"
     }
 
     private const val HEADER = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
     private const val NS_MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
     private const val NS_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
-    private fun contentTypes(sheetCount: Int) = buildString {
+    private fun contentTypes(sheets: List<Sheet>) = buildString {
+        val sheetCount = sheets.size
         append(HEADER)
         append("<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">")
         append("<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>")
         append("<Default Extension=\"xml\" ContentType=\"application/xml\"/>")
+        sheets.mapNotNull { it.image?.extension }.distinct().forEach { ext ->
+            append("<Default Extension=\"$ext\" ContentType=\"image/$ext\"/>")
+        }
+        sheets.forEachIndexed { i, sheet ->
+            if (sheet.image != null) {
+                append("<Override PartName=\"/xl/drawings/drawing${i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawing+xml\"/>")
+            }
+        }
         append("<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>")
         append("<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>")
         for (i in 1..sheetCount) {
@@ -225,6 +290,7 @@ object XlsxWriter {
             append("</mergeCells>")
         }
         append("<pageMargins left=\"0.7\" right=\"0.7\" top=\"0.75\" bottom=\"0.75\" header=\"0.3\" footer=\"0.3\"/>")
+        if (sheet.image != null) append("<drawing r:id=\"rId1\"/>")
         append("</worksheet>")
     }
 

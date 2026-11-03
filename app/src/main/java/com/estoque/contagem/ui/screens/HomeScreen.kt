@@ -68,7 +68,9 @@ import com.estoque.contagem.data.PhotoChange
 import com.estoque.contagem.data.Product
 import com.estoque.contagem.excel.StockReport
 import com.estoque.contagem.ui.UiState
+import com.estoque.contagem.ui.components.CompanyLogoBox
 import com.estoque.contagem.ui.components.ConfirmDialog
+import com.estoque.contagem.ui.components.rememberProductImage
 import com.estoque.contagem.ui.components.ProductAvatar
 import com.estoque.contagem.ui.components.ProductFormDialog
 import com.estoque.contagem.ui.components.StatusPill
@@ -243,8 +245,26 @@ private fun HomeHeader(state: UiState, onNewCount: () -> Unit) {
     ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Logo e nome da empresa (cadastrados em ⚙️ Mais)
+                val logo = rememberProductImage(state.company.logoFile)
+                if (logo != null) {
+                    CompanyLogoBox(logo, 48.dp)
+                    Spacer(Modifier.width(12.dp))
+                }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("📦 Meu Estoque", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
+                    val companyName = state.company.name.trim()
+                    Text(
+                        when {
+                            companyName.isNotEmpty() -> companyName
+                            logo != null -> "Meu Estoque"
+                            else -> "📦 Meu Estoque"
+                        },
+                        color = Color.White,
+                        fontSize = if (companyName.length > 18) 21.sp else 26.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Text(
                         "Contagem iniciada em ${formatDate(state.countStartedAt)}",
                         color = Color.White.copy(alpha = 0.85f),

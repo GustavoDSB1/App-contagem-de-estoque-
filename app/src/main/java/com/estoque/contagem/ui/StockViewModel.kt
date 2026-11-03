@@ -6,7 +6,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.estoque.contagem.data.Consumption
 import com.estoque.contagem.data.CountEntry
+import com.estoque.contagem.data.BackupCompany
 import com.estoque.contagem.data.BackupData
+import com.estoque.contagem.data.CompanySettings
+import com.estoque.contagem.excel.CompanyInfo
 import com.estoque.contagem.data.BackupException
 import com.estoque.contagem.data.BackupFormat
 import com.estoque.contagem.data.BackupPerson
@@ -43,6 +46,7 @@ data class UiState(
     val countStartedAt: Long = System.currentTimeMillis(),
     val consumptions: List<Consumption> = emptyList(),
     val people: List<Person> = emptyList(),
+    val company: CompanySettings = CompanySettings(),
     val loaded: Boolean = false
 ) {
     val totalItems: Long get() = products.sumOf { it.quantity }
@@ -85,7 +89,9 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             val data = withContext(Dispatchers.IO) { repository.load() }
-            _state.value = UiState(data.products, data.countStartedAt, data.consumptions, data.people, loaded = true)
+            _state.value = UiState(
+                data.products, data.countStartedAt, data.consumptions, data.people, data.company, loaded = true
+            )
             // Primeira vez com o cadastro de pessoas: aproveita os nomes já usados nas baixas
             if (data.people.isEmpty() && data.consumptions.isNotEmpty()) {
                 val seeded = data.consumptions
@@ -102,7 +108,9 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             saveMutex.withLock {
                 val latest = _state.value
-                repository.save(StockData(latest.products, latest.countStartedAt, latest.consumptions, latest.people))
+                repository.save(
+                    StockData(latest.products, latest.countStartedAt, latest.consumptions, latest.people, latest.company)
+                )
             }
         }
     }
@@ -275,6 +283,22 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
         return added
     }
 
+    // ---------- Dados da empresa ----------
+
+    fun updateCompany(name: String, document: String, logo: PhotoChange) {
+        val app = getApplication<Application>()
+        val old = _state.value.company.logoFile
+        val newLogo = when (logo) {
+            PhotoChange.Keep -> old
+            PhotoChange.Remove -> null
+            is PhotoChange.New -> runCatching { ProductImages.saveLogo(app, logo.bitmap) }.getOrNull() ?: old
+        }
+        if (newLogo != old) ProductImages.delete(app, old)
+        update {
+            it.copy(company = CompanySettings(name.trim().take(60), document.trim().take(30), newLogo))
+        }
+    }
+
     // ---------- Funcionários e diaristas ----------
 
     /** Retorna false se o nome estiver vazio ou já cadastrado nesse tipo. */
@@ -307,7 +331,10 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                             )
                         },
                         people = snapshot.people.map { BackupPerson(it.name, it.type) },
-                        createdAt = now
+                        createdAt = now,
+                        company = snapshot.company.takeUnless { it.isEmpty }?.let { c ->
+                            BackupCompany(c.name, c.document, ProductImages.readJpeg(app, c.logoFile))
+                        }
                     )
                     val stamp = java.text.SimpleDateFormat("yyyy-MM-dd_HH-mm", java.util.Locale.US).format(java.util.Date(now))
                     val fileName = "Backup_Estoque_$stamp.json"
@@ -370,6 +397,11 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
             val photoFiles = withContext(Dispatchers.IO) {
                 data.products.map { b -> b.photoJpeg?.let { runCatching { ProductImages.saveJpeg(app, it) }.getOrNull() } }
             }
+            // Dados da empresa: só entram se este celular ainda não tiver os seus
+            val backupCompany = data.company?.takeIf { _state.value.company.isEmpty && it.name.isNotBlank() }
+            val companyLogo = withContext(Dispatchers.IO) {
+                backupCompany?.logoPng?.let { runCatching { ProductImages.saveLogoBytes(app, it) }.getOrNull() }
+            }
             val now = System.currentTimeMillis()
             val unused = mutableListOf<String>()
             update { s ->
@@ -415,7 +447,12 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 s.copy(
                     products = s.products.map { updatedIds[it.id] ?: it } + added,
-                    people = s.people + newPeople
+                    people = s.people + newPeople,
+                    company = if (backupCompany != null && s.company.isEmpty) {
+                        CompanySettings(backupCompany.name, backupCompany.document, companyLogo)
+                    } else {
+                        s.company
+                    }
                 )
             }
             withContext(Dispatchers.IO) { unused.forEach { ProductImages.delete(app, it) } }
@@ -431,7 +468,9 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                     if (snapshot.products.none { !it.excludeFromExcel }) {
                         throw IllegalStateException("todos os produtos estão marcados como fora da planilha")
                     }
-                    ExcelExporter.export(getApplication(), snapshot.products, snapshot.countStartedAt)
+                    val c = snapshot.company
+                    val company = CompanyInfo(c.name, c.document, ProductImages.readJpeg(getApplication(), c.logoFile))
+                    ExcelExporter.export(getApplication(), snapshot.products, snapshot.countStartedAt, company)
                 }
             }
             onDone(result)

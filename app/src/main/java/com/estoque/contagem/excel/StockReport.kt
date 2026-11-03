@@ -6,15 +6,61 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** Dados da empresa que aparecem no cabeçalho da planilha. */
+data class CompanyInfo(
+    val name: String = "",
+    /** CNPJ ou CPF, como o usuário digitou. */
+    val document: String = "",
+    /** Logo em PNG (opcional). */
+    val logoPng: ByteArray? = null
+)
+
 /** Monta as abas da planilha de contagem a partir dos produtos. */
 object StockReport {
 
     private val BR: Locale = Locale.forLanguageTag("pt-BR")
 
     /** Produtos da lista de exclusão ("fora da planilha") não entram em nenhuma aba. */
-    fun build(products: List<Product>, countStartedAt: Long, generatedAt: Long): List<Sheet> {
+    fun build(
+        products: List<Product>,
+        countStartedAt: Long,
+        generatedAt: Long,
+        company: CompanyInfo = CompanyInfo()
+    ): List<Sheet> {
         val sorted = sortByName(products.filterNot { it.excludeFromExcel })
-        return listOf(countSheet(sorted, countStartedAt, generatedAt), historySheet(sorted, generatedAt))
+        return listOf(
+            countSheet(sorted, countStartedAt, generatedAt, company),
+            historySheet(sorted, generatedAt, company)
+        )
+    }
+
+    /** Largura e altura de um PNG, lidas do cabeçalho do arquivo. */
+    fun pngSize(png: ByteArray): Pair<Int, Int>? {
+        if (png.size < 24 || png[1] != 'P'.code.toByte() || png[2] != 'N'.code.toByte()) return null
+        fun int(at: Int) = ((png[at].toInt() and 0xFF) shl 24) or ((png[at + 1].toInt() and 0xFF) shl 16) or
+            ((png[at + 2].toInt() and 0xFF) shl 8) or (png[at + 3].toInt() and 0xFF)
+        val w = int(16)
+        val h = int(20)
+        return if (w > 0 && h > 0) w to h else null
+    }
+
+    /** Logo no canto direito do cabeçalho, com no máximo 56 px de altura. */
+    private fun logoImage(company: CompanyInfo, column: Int, columnWidthChars: Double): SheetImage? {
+        val png = company.logoPng ?: return null
+        val (w, h) = pngSize(png) ?: return null
+        val height = minOf(56, h)
+        val width = minOf(150, (w.toDouble() * height / h).toInt().coerceAtLeast(1))
+        val columnPx = (columnWidthChars * 7 + 5).toInt()
+        return SheetImage(
+            bytes = png,
+            extension = "png",
+            column = column,
+            row = 0,
+            widthPx = width,
+            heightPx = height,
+            offsetXPx = (columnPx - width - 4).coerceAtLeast(0),
+            offsetYPx = 4
+        )
     }
 
     fun sortByName(products: List<Product>): List<Product> {
@@ -28,13 +74,28 @@ object StockReport {
     private fun shortDateTime(millis: Long): String =
         SimpleDateFormat("dd/MM/yyyy HH:mm", BR).format(Date(millis))
 
-    private fun countSheet(products: List<Product>, countStartedAt: Long, generatedAt: Long): Sheet {
+    private fun countSheet(
+        products: List<Product>,
+        countStartedAt: Long,
+        generatedAt: Long,
+        company: CompanyInfo
+    ): Sheet {
         val total = products.sumOf { it.quantity }
         val counted = products.count { it.wasCounted }
         val rows = mutableListOf<List<Cell?>>()
 
-        rows += listOf(Cell.Text("Contagem de Estoque", CellStyle.TITLE))
-        rows += listOf(Cell.Text("Data da contagem: ${dateTime(generatedAt)}", CellStyle.INFO))
+        val companyName = company.name.trim()
+        rows += listOf(Cell.Text(companyName.ifEmpty { "Contagem de Estoque" }, CellStyle.TITLE))
+        if (company.document.isNotBlank()) {
+            rows += listOf(Cell.Text("CNPJ/CPF: ${company.document.trim()}", CellStyle.SUBTITLE))
+        }
+        rows += listOf(
+            Cell.Text(
+                (if (companyName.isNotEmpty()) "Contagem de estoque • " else "") +
+                    "Data da contagem: ${dateTime(generatedAt)}",
+                CellStyle.INFO
+            )
+        )
         rows += listOf(Cell.Text("Contagem iniciada em: ${dateTime(countStartedAt)}", CellStyle.SUBTITLE))
         rows += listOf(
             Cell.Text(
@@ -42,8 +103,10 @@ object StockReport {
                 CellStyle.SUBTITLE
             )
         )
+        val infoRows = rows.size
         rows += emptyList<Cell?>()
         rows += listOf("#", "Produto", "Quantidade", "Última contagem").map { Cell.Text(it, CellStyle.HEADER) }
+        val headerRow = rows.size // número da linha do cabeçalho da tabela
 
         val firstDataRow = rows.size + 1 // número da linha no Excel (começa em 1)
         products.forEachIndexed { i, p ->
@@ -70,13 +133,14 @@ object StockReport {
             name = "Contagem",
             columnWidths = listOf(6.0, 40.0, 16.0, 22.0),
             rows = rows,
-            merges = listOf("A1:D1", "A2:D2", "A3:D3", "A4:D4"),
-            rowHeights = mapOf(0 to 32.0, 5 to 24.0),
-            frozenRows = 6
+            merges = (1..infoRows).map { "A$it:D$it" },
+            rowHeights = mapOf(0 to 32.0, headerRow - 1 to 24.0),
+            frozenRows = headerRow,
+            image = logoImage(company, column = 3, columnWidthChars = 22.0)
         )
     }
 
-    private fun historySheet(products: List<Product>, generatedAt: Long): Sheet {
+    private fun historySheet(products: List<Product>, generatedAt: Long, company: CompanyInfo): Sheet {
         data class Line(val name: String, val entry: com.estoque.contagem.data.CountEntry)
 
         val lines = products
@@ -85,7 +149,8 @@ object StockReport {
 
         val rows = mutableListOf<List<Cell?>>()
         rows += listOf(Cell.Text("Histórico de lançamentos", CellStyle.TITLE))
-        rows += listOf(Cell.Text("Gerado em: ${dateTime(generatedAt)}", CellStyle.SUBTITLE))
+        val companyPrefix = company.name.trim().let { if (it.isEmpty()) "" else "$it • " }
+        rows += listOf(Cell.Text("${companyPrefix}Gerado em: ${dateTime(generatedAt)}", CellStyle.SUBTITLE))
         rows += emptyList<Cell?>()
         rows += listOf("Data e hora", "Produto", "Operação", "Quantidade", "Total após")
             .map { Cell.Text(it, CellStyle.HEADER) }
@@ -118,7 +183,8 @@ object StockReport {
             rows = rows,
             merges = listOf("A1:E1", "A2:E2"),
             rowHeights = mapOf(0 to 32.0, 3 to 24.0),
-            frozenRows = 4
+            frozenRows = 4,
+            image = logoImage(company, column = 4, columnWidthChars = 14.0)
         )
     }
 }

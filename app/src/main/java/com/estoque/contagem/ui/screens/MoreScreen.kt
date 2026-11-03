@@ -51,7 +51,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.estoque.contagem.data.CompanySettings
 import com.estoque.contagem.data.Person
+import com.estoque.contagem.data.PhotoChange
+import com.estoque.contagem.ui.components.CompanyDialog
+import com.estoque.contagem.ui.components.CompanyLogoBox
+import com.estoque.contagem.ui.components.rememberProductImage
 import com.estoque.contagem.data.PersonType
 import com.estoque.contagem.data.Product
 import com.estoque.contagem.excel.StockReport
@@ -80,8 +85,10 @@ fun MoreScreen(
     onExportBackup: () -> Unit,
     onImportBackup: () -> Unit,
     onImportSpreadsheet: () -> Unit,
-    onSetExcludedFromExcel: (Set<String>) -> Unit
+    onSetExcludedFromExcel: (Set<String>) -> Unit,
+    onSaveCompany: (name: String, document: String, logo: PhotoChange) -> Unit
 ) {
+    var editingCompany by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf<PersonType?>(null) }
     var choosingExcluded by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<Person?>(null) }
@@ -117,6 +124,8 @@ fun MoreScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                CompanyCard(company = state.company, onEdit = { editingCompany = true })
+
                 PersonType.entries.forEach { type ->
                     PeopleCard(
                         type = type,
@@ -222,6 +231,17 @@ fun MoreScreen(
         )
     }
 
+    if (editingCompany) {
+        CompanyDialog(
+            company = state.company,
+            onDismiss = { editingCompany = false },
+            onSave = { name, document, logo ->
+                onSaveCompany(name, document, logo)
+                editingCompany = false
+            }
+        )
+    }
+
     if (choosingExcluded) {
         ExcludeFromExcelDialog(
             products = state.products,
@@ -243,6 +263,59 @@ fun MoreScreen(
             onConfirm = { onDeletePerson(person); deleting = null },
             onDismiss = { deleting = null }
         )
+    }
+}
+
+@Composable
+private fun CompanyCard(company: CompanySettings, onEdit: () -> Unit) {
+    val logo = rememberProductImage(company.logoFile)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.White)
+            .clickable(onClick = onEdit)
+            .padding(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Indigo.copy(alpha = 0.12f))
+                    .padding(2.dp)
+            ) { CompanyLogoBox(logo, 64.dp) }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    company.name.ifBlank { "Sua empresa" },
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    when {
+                        company.isEmpty -> "Cadastre o nome e o logo: eles aparecem no app e na planilha."
+                        company.document.isNotBlank() -> "CNPJ/CPF: ${company.document}"
+                        else -> "Toque para editar"
+                    },
+                    color = TextSecondary,
+                    fontSize = 13.sp
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = onEdit,
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Indigo),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                if (company.isEmpty) "🏢 Cadastrar dados da empresa" else "✏️ Editar dados da empresa",
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 

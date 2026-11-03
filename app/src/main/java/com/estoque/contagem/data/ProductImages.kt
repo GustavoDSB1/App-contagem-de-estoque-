@@ -123,6 +123,47 @@ object ProductImages {
         return if (target == side) square else Bitmap.createScaledBitmap(square, target, target, true)
     }
 
+    /**
+     * Logo da empresa: mantém o formato original (sem recortar) e a transparência,
+     * reduzido para no máximo 512 px no lado maior.
+     */
+    fun decodeLogo(context: Context, uri: Uri): Bitmap {
+        val decoded = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, info, _ ->
+                val largest = max(info.size.width, info.size.height)
+                decoder.setTargetSampleSize(max(1, largest / 1024))
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        } else {
+            decodeLegacy(context, uri)
+        }
+        val largest = max(decoded.width, decoded.height)
+        if (largest <= 512) return decoded
+        val scale = 512f / largest
+        return Bitmap.createScaledBitmap(
+            decoded,
+            (decoded.width * scale).toInt().coerceAtLeast(1),
+            (decoded.height * scale).toInt().coerceAtLeast(1),
+            true
+        )
+    }
+
+    /** Salva o logo em PNG (mantém fundo transparente). */
+    fun saveLogo(context: Context, bitmap: Bitmap): String {
+        val name = "logo-${UUID.randomUUID()}.png"
+        File(dir(context), name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        cache.put(name, bitmap.asImageBitmap())
+        return name
+    }
+
+    /** Salva um logo vindo do backup. */
+    fun saveLogoBytes(context: Context, bytes: ByteArray): String? {
+        if (com.estoque.contagem.excel.StockReport.pngSize(bytes) == null) return null
+        val name = "logo-${UUID.randomUUID()}.png"
+        File(dir(context), name).writeBytes(bytes)
+        return name
+    }
+
     /** Arquivo temporário para a câmera salvar a foto. */
     fun cameraTempFile(context: Context): File =
         File(File(context.cacheDir, "camera").apply { mkdirs() }, "foto.jpg")
