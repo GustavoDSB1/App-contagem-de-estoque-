@@ -126,7 +126,7 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
     fun addProduct(
         name: String,
         emoji: String,
-        initialQuantity: Long,
+        initialQuantity: Double,
         priceCents: Long,
         photo: PhotoChange = PhotoChange.Keep,
         unit: MeasureUnit = MeasureUnit.UN
