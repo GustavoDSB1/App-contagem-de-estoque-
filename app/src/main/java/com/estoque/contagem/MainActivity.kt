@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -30,7 +31,9 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +57,7 @@ import com.estoque.contagem.ui.screens.BackupDoneDialog
 import com.estoque.contagem.ui.screens.BackupImportDialog
 import com.estoque.contagem.ui.screens.ConsumptionScreen
 import com.estoque.contagem.ui.screens.MoreScreen
+import com.estoque.contagem.ui.screens.OnboardingScreen
 import com.estoque.contagem.ui.screens.ExportDoneDialog
 import com.estoque.contagem.ui.screens.HomeScreen
 import com.estoque.contagem.ui.screens.ImportDialog
@@ -68,8 +72,25 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT))
         super.onCreate(savedInstanceState)
         setContent {
-            EstoqueTheme {
-                EstoqueApp()
+            val vm: StockViewModel = viewModel()
+            val state by vm.state.collectAsStateWithLifecycle()
+            // Tema escolhido em ⚙️ Mais (ou o do celular, no modo automático)
+            val dark = when (state.settings.theme) {
+                "dark" -> true
+                "light" -> false
+                else -> isSystemInDarkTheme()
+            }
+            // Ícones da barra de navegação do sistema combinando com o tema
+            DisposableEffect(dark) {
+                enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
+                    navigationBarStyle = if (dark) SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+                    else SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+                )
+                onDispose { }
+            }
+            EstoqueTheme(darkTheme = dark) {
+                EstoqueApp(vm)
             }
         }
     }
@@ -78,6 +99,13 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun EstoqueApp(vm: StockViewModel = viewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
+
+    // Primeira vez: tela de boas-vindas
+    if (state.loaded && !state.settings.onboardingDone) {
+        OnboardingScreen(onFinish = { vm.completeOnboarding() })
+        return
+    }
+
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -179,7 +207,7 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
             Scaffold(
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 bottomBar = {
-                    NavigationBar(containerColor = Color.White) {
+                    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                         // A aba Consumo some quando é desligada em ⚙️ Mais
                         val tabs = listOf(Triple("estoque", "📦", "Estoque")) +
                             (if (state.settings.consumptionEnabled) listOf(Triple("consumo", "🧾", "Consumo")) else emptyList()) +
@@ -280,6 +308,7 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
                                 notify("✅ Dados da empresa salvos")
                             },
                             onSetConsumptionEnabled = { vm.setConsumptionEnabled(it) },
+                            onSetTheme = { vm.setTheme(it) },
                             onAddGroup = { label, emoji -> vm.addGroup(label, emoji) },
                             onEditGroup = { id, label, emoji -> vm.editGroup(id, label, emoji) },
                             onDeleteGroup = { vm.deleteGroup(it.id) },

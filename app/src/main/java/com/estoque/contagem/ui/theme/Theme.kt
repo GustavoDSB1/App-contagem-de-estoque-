@@ -2,8 +2,10 @@ package com.estoque.contagem.ui.theme
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 
 val Indigo = Color(0xFF4F46E5)
@@ -17,7 +19,14 @@ val WarningText = Color(0xFFB45309)
 val DangerRed = Color(0xFFDC2626)
 val AppBackground = Color(0xFFF4F6FB)
 val TextPrimary = Color(0xFF111827)
-val TextSecondary = Color(0xFF6B7280)
+
+/** Texto secundário (cinza): acompanha o tema claro/escuro. */
+val TextSecondary: Color
+    @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
+
+/** Fundo de cartões, campos e barras: branco no tema claro, cinza-azulado no escuro. */
+val CardColor: Color
+    @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surface
 
 /** Cores usadas nos ícones dos produtos (uma diferente para cada produto). */
 val ProductColors = listOf(
@@ -56,6 +65,28 @@ private val LightColors = lightColorScheme(
 )
 
 @Composable
-fun EstoqueTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = LightColors, typography = Typography(), content = content)
+fun EstoqueTheme(darkTheme: Boolean = false, content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = if (darkTheme) DarkColors else LightColors, typography = Typography(), content = content)
 }
+
+private val DarkColors = darkColorScheme(
+    primary = Color(0xFF818CF8),
+    onPrimary = Color(0xFF1E1B4B),
+    primaryContainer = Color(0xFF312E81),
+    onPrimaryContainer = Color(0xFFE0E7FF),
+    secondary = Color(0xFF4ADE80),
+    onSecondary = Color(0xFF052E16),
+    background = Color(0xFF0F1220),
+    onBackground = Color(0xFFE5E7EB),
+    surface = Color(0xFF1B2033),
+    onSurface = Color(0xFFE5E7EB),
+    surfaceVariant = Color(0xFF272D44),
+    onSurfaceVariant = Color(0xFF9CA3AF),
+    surfaceContainerLowest = Color(0xFF151A2B),
+    surfaceContainerLow = Color(0xFF1B2033),
+    surfaceContainer = Color(0xFF1B2033),
+    surfaceContainerHigh = Color(0xFF222840),
+    surfaceContainerHighest = Color(0xFF272D44),
+    outline = Color(0xFF4B5563),
+    error = Color(0xFFF87171)
+)

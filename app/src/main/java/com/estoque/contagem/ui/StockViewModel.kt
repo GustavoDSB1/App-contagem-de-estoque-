@@ -109,6 +109,8 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                     .map { Person(UUID.randomUUID().toString(), it.personName.trim(), it.personTypeId) }
                 update { it.copy(people = seeded) }
             }
+            // Quem já usa o app (tem produtos) não precisa ver a tela de boas-vindas
+            if (!data.settings.onboardingDone && data.products.isNotEmpty()) completeOnboarding()
         }
     }
 
@@ -368,6 +370,15 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                 people = s.people.filterNot { it.typeId == id }
             )
         }
+    }
+
+    fun completeOnboarding() {
+        update { it.copy(settings = it.settings.copy(onboardingDone = true)) }
+    }
+
+    /** Tema: "system" (segue o celular), "light" ou "dark". */
+    fun setTheme(theme: String) {
+        update { it.copy(settings = it.settings.copy(theme = theme)) }
     }
 
     fun setConsumptionEnabled(enabled: Boolean) {

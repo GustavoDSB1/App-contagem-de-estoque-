@@ -51,4 +51,26 @@ data class AppSettings(
     val theme: String = "system",
     /** Última escolha: relatório com valores em R$. */
     val exportWithValues: Boolean = false
-)
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("consumptionEnabled", consumptionEnabled)
+        .put("onboardingDone", onboardingDone)
+        .put("theme", theme)
+        .put("exportWithValues", exportWithValues)
+        .put("message", messageTemplate.toJson())
+
+    companion object {
+        val THEMES = setOf("system", "light", "dark")
+
+        fun fromJson(o: JSONObject?): AppSettings {
+            if (o == null) return AppSettings()
+            return AppSettings(
+                consumptionEnabled = o.optBoolean("consumptionEnabled", true),
+                messageTemplate = o.optJSONObject("message")?.let { MessageTemplate.fromJson(it) } ?: MessageTemplate.DEFAULT,
+                onboardingDone = o.optBoolean("onboardingDone", false),
+                theme = o.optString("theme", "system").takeIf { it in THEMES } ?: "system",
+                exportWithValues = o.optBoolean("exportWithValues", false)
+            )
+        }
+    }
+}

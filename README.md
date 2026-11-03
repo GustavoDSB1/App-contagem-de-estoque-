@@ -61,6 +61,8 @@ Aplicativo Android simples e visual para contar estoque e gerar uma planilha Exc
   - **Fora da planilha Excel**: lista de produtos que não vão para a planilha de contagem
     (também dá para marcar na tela do produto).
   - Importar produtos de planilha Excel.
+- **Modo escuro** (automático, claro ou escuro, em ⚙️ Mais → Aparência) e **tela de boas-vindas** na
+  primeira vez que o app é aberto.
 - Tudo fica salvo no celular, funciona **sem internet**.
 
 ## Como instalar no celular
@@ -130,5 +132,5 @@ app/src/main/java/com/estoque/contagem/
     ├── Format.kt                # Datas, números e busca sem acento
     ├── theme/Theme.kt           # Cores do app
     ├── components/Components.kt # Ícone do produto, formulários e confirmações
-    └── screens/                 # Estoque, produto, Consumo e "planilha pronta"
+    └── screens/                 # Estoque, produto, Consumo, Mais, boas-vindas e diálogos
 ```

@@ -93,6 +93,7 @@ import com.estoque.contagem.ui.components.matchesCategory
 import com.estoque.contagem.ui.components.MoneyField
 import com.estoque.contagem.ui.components.PersonFormDialog
 import com.estoque.contagem.ui.components.ProductAvatar
+import com.estoque.contagem.ui.theme.CardColor
 import com.estoque.contagem.ui.theme.DangerRed
 import com.estoque.contagem.ui.theme.TextSecondary
 import com.estoque.contagem.ui.theme.productColor
@@ -101,6 +102,8 @@ private val ConsumoOrange = Color(0xFFF97316)
 private val ConsumoPink = Color(0xFFDB2777)
 private val WhatsAppGreen = Color(0xFF25D366)
 private val WhatsAppBubble = Color(0xFFDCF8C6)
+/** Texto escuro no balão verde-claro (também no modo escuro). */
+private val BubbleText = Color(0xFF111827)
 
 @Composable
 fun ConsumptionScreen(
@@ -208,7 +211,7 @@ fun ConsumptionScreen(
                                     )
                                 },
                                 colors = IconButtonDefaults.iconButtonColors(
-                                    containerColor = Color.White,
+                                    containerColor = CardColor,
                                     contentColor = ConsumoOrange
                                 )
                             ) {
@@ -475,8 +478,8 @@ private fun ProductSearchField(query: String, onQueryChange: (String) -> Unit) {
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         shape = RoundedCornerShape(16.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            unfocusedContainerColor = Color.White,
-            focusedContainerColor = Color.White,
+            unfocusedContainerColor = CardColor,
+            focusedContainerColor = CardColor,
             focusedBorderColor = ConsumoOrange
         ),
         modifier = Modifier
@@ -544,7 +547,7 @@ private fun PersonChip(name: String, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .height(44.dp)
             .clip(RoundedCornerShape(50))
-            .background(if (selected) ConsumoOrange else Color.White)
+            .background(if (selected) ConsumoOrange else CardColor)
             .clickable(onClick = onClick)
             .padding(start = 4.dp, end = 14.dp)
     ) {
@@ -577,7 +580,7 @@ private fun ProductTile(product: Product, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = CardColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
@@ -636,7 +639,7 @@ private fun DaySummary(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(18.dp))
-                .background(Color.White)
+                .background(CardColor)
                 .padding(vertical = 6.dp)
         ) {
             groups.forEachIndexed { gi, list ->
@@ -714,6 +717,7 @@ private fun DaySummary(
             message,
             fontSize = 15.sp,
             lineHeight = 21.sp,
+            color = BubbleText,
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
@@ -813,6 +817,7 @@ private fun AfterConsumeDialog(
                     message,
                     fontSize = 15.sp,
                     lineHeight = 21.sp,
+                    color = BubbleText,
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp))

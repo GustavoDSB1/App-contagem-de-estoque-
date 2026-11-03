@@ -87,6 +87,7 @@ import com.estoque.contagem.ui.formatDate
 import com.estoque.contagem.ui.formatQty
 import com.estoque.contagem.ui.formatWhen
 import com.estoque.contagem.ui.normalizedForSearch
+import com.estoque.contagem.ui.theme.CardColor
 import com.estoque.contagem.ui.theme.DangerRed
 import com.estoque.contagem.ui.theme.ExcelGreen
 import com.estoque.contagem.ui.theme.Indigo
@@ -447,7 +448,7 @@ private fun FilterChips(
                 label = { Text("${f.label} (${counts[f] ?: 0})", fontWeight = FontWeight.SemiBold) },
                 shape = RoundedCornerShape(50),
                 colors = FilterChipDefaults.filterChipColors(
-                    containerColor = Color.White,
+                    containerColor = CardColor,
                     selectedContainerColor = Indigo,
                     selectedLabelColor = Color.White
                 )
@@ -481,8 +482,8 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, onScan: 
         singleLine = true,
         shape = RoundedCornerShape(16.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            unfocusedContainerColor = Color.White,
-            focusedContainerColor = Color.White,
+            unfocusedContainerColor = CardColor,
+            focusedContainerColor = CardColor,
             unfocusedBorderColor = Color.Transparent
         ),
         modifier = Modifier
@@ -497,7 +498,7 @@ private fun ProductCard(product: Product, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = CardColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
@@ -536,7 +537,7 @@ private fun ProductCard(product: Product, onClick: () -> Unit) {
                 }
                 if (product.excludeFromExcel) {
                     Spacer(Modifier.height(4.dp))
-                    StatusPill("🚫 Fora do Excel", Color(0xFFF1F5F9), TextSecondary)
+                    StatusPill("🚫 Fora do Excel", MaterialTheme.colorScheme.surfaceVariant, TextSecondary)
                 }
             }
             Spacer(Modifier.width(8.dp))
@@ -676,7 +677,7 @@ private fun ExportOptionsDialog(
 
 @Composable
 private fun ExportBar(enabled: Boolean, exporting: Boolean, onExport: () -> Unit) {
-    Surface(color = Color.White, shadowElevation = 12.dp) {
+    Surface(color = CardColor, shadowElevation = 12.dp) {
         Box(
             modifier = Modifier
                 .navigationBarsPadding()

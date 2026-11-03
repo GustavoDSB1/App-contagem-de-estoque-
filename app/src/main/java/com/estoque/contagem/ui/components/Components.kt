@@ -70,6 +70,7 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.estoque.contagem.ui.theme.CardColor
 import com.estoque.contagem.ui.theme.productColor
 
 val ProductEmojis = listOf(
@@ -622,7 +623,7 @@ fun CategoryFilterRow(
                 label = { Text(label, fontWeight = FontWeight.SemiBold) },
                 shape = RoundedCornerShape(50),
                 colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
-                    containerColor = Color.White,
+                    containerColor = CardColor,
                     selectedContainerColor = selectedColor,
                     selectedLabelColor = Color.White
                 )

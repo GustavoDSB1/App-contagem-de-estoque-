@@ -65,6 +65,7 @@ import com.estoque.contagem.ui.components.ProductFormDialog
 import com.estoque.contagem.ui.ProductForm
 import com.estoque.contagem.ui.formatQty
 import com.estoque.contagem.ui.formatWhen
+import com.estoque.contagem.ui.theme.CardColor
 import com.estoque.contagem.ui.theme.DangerRed
 import com.estoque.contagem.ui.theme.SuccessBg
 import com.estoque.contagem.ui.theme.SuccessText
@@ -255,8 +256,8 @@ fun ProductScreen(
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = color,
                         cursorColor = color,
-                        unfocusedContainerColor = Color.White,
-                        focusedContainerColor = Color.White
+                        unfocusedContainerColor = CardColor,
+                        focusedContainerColor = CardColor
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -329,7 +330,7 @@ fun ProductScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
-                            .background(Color.White)
+                            .background(CardColor)
                     ) {
                         product.entries.asReversed().take(20).forEachIndexed { i, e ->
                             if (i > 0) {
@@ -416,7 +417,7 @@ private fun ModeOption(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(if (selected) color.copy(alpha = 0.12f) else Color.White)
+            .background(if (selected) color.copy(alpha = 0.12f) else CardColor)
             .border(2.dp, if (selected) color else Color.Transparent, RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 14.dp, horizontal = 8.dp)

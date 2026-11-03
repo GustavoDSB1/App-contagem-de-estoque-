@@ -2,7 +2,6 @@ package com.estoque.contagem.data
 
 import android.content.Context
 import com.estoque.contagem.consumo.AppSettings
-import com.estoque.contagem.consumo.MessageTemplate
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -90,7 +89,7 @@ class ProductRepository(context: Context) {
             .put("groups", JSONArray().apply {
                 data.groups.forEach { g -> put(JSONObject().put("id", g.id).put("label", g.label).put("emoji", g.emoji)) }
             })
-            .put("settings", settingsToJson(data.settings))
+            .put("settings", data.settings.toJson())
             .put(
                 "company",
                 JSONObject()
@@ -170,22 +169,7 @@ class ProductRepository(context: Context) {
             people,
             company,
             groups,
-            json.optJSONObject("settings")?.let { settingsFromJson(it) } ?: AppSettings()
+            AppSettings.fromJson(json.optJSONObject("settings"))
         )
     }
-
-    private fun settingsToJson(s: AppSettings): JSONObject = JSONObject()
-        .put("consumptionEnabled", s.consumptionEnabled)
-        .put("onboardingDone", s.onboardingDone)
-        .put("theme", s.theme)
-        .put("exportWithValues", s.exportWithValues)
-        .put("message", s.messageTemplate.toJson())
-
-    private fun settingsFromJson(o: JSONObject) = AppSettings(
-        consumptionEnabled = o.optBoolean("consumptionEnabled", true),
-        messageTemplate = o.optJSONObject("message")?.let { MessageTemplate.fromJson(it) } ?: MessageTemplate.DEFAULT,
-        onboardingDone = o.optBoolean("onboardingDone", false),
-        theme = o.optString("theme", "system").ifBlank { "system" },
-        exportWithValues = o.optBoolean("exportWithValues", false)
-    )
 }

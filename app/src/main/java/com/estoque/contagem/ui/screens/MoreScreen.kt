@@ -73,6 +73,7 @@ import com.estoque.contagem.ui.BackupPreview
 import com.estoque.contagem.ui.UiState
 import com.estoque.contagem.ui.components.ConfirmDialog
 import com.estoque.contagem.ui.components.PersonFormDialog
+import com.estoque.contagem.ui.theme.CardColor
 import com.estoque.contagem.ui.theme.DangerRed
 import com.estoque.contagem.ui.theme.ExcelGreen
 import com.estoque.contagem.ui.theme.Indigo
@@ -94,6 +95,7 @@ fun MoreScreen(
     onSetExcludedFromExcel: (Set<String>) -> Unit,
     onSaveCompany: (name: String, document: String, logo: PhotoChange) -> Unit,
     onSetConsumptionEnabled: (Boolean) -> Unit = {},
+    onSetTheme: (String) -> Unit = {},
     onAddGroup: (label: String, emoji: String) -> Boolean = { _, _ -> false },
     onEditGroup: (id: String, label: String, emoji: String) -> Boolean = { _, _, _ -> false },
     onDeleteGroup: (PersonType) -> Unit = {},
@@ -140,6 +142,32 @@ fun MoreScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 CompanyCard(company = state.company, onEdit = { editingCompany = true })
+
+                SectionCard(
+                    emoji = "🎨",
+                    title = "Aparência",
+                    text = "Tema claro, escuro ou igual ao do celular."
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("system" to "📱 Automático", "light" to "☀️ Claro", "dark" to "🌙 Escuro").forEach { (key, label) ->
+                            val selected = state.settings.theme == key
+                            Text(
+                                label,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(if (selected) Indigo else MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable { onSetTheme(key) }
+                                    .padding(vertical = 12.dp)
+                            )
+                        }
+                    }
+                }
 
                 // ----- Aba Consumo: liga/desliga, grupos de pessoas e mensagem -----
                 SectionCard(
@@ -378,7 +406,7 @@ private fun CompanyCard(company: CompanySettings, onEdit: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Color.White)
+            .background(CardColor)
             .clickable(onClick = onEdit)
             .padding(16.dp)
     ) {
@@ -435,7 +463,7 @@ private fun SectionCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Color.White)
+            .background(CardColor)
             .padding(16.dp)
     ) {
         Text("$emoji $title", fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -461,7 +489,7 @@ private fun PeopleCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Color.White)
+            .background(CardColor)
             .padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
