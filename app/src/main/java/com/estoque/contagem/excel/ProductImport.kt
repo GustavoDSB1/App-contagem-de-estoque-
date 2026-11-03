@@ -15,7 +15,8 @@ data class ImportedProduct(
     val priceCents: Long,
     val lastCountAt: Long?,
     val emoji: String,
-    val unit: MeasureUnit = MeasureUnit.UN
+    val unit: MeasureUnit = MeasureUnit.UN,
+    val category: String = ""
 )
 
 class ImportException(message: String) : Exception(message)
@@ -37,6 +38,7 @@ object ProductImport {
         "valor", "preco", "valor de venda", "preco de venda", "valor unitario", "preco unitario", "r$"
     )
     private val DATE_HEADERS = setOf("ultima contagem", "data", "data da contagem")
+    private val CATEGORY_HEADERS = setOf("categoria", "categorias", "grupo", "secao", "departamento", "tipo")
     private val UNIT_HEADERS = setOf("unidade", "un", "und", "unid", "medida", "unidade de medida")
 
     fun parse(sheets: Map<String, List<List<String>>>): List<ImportedProduct> {
@@ -60,6 +62,7 @@ object ProductImport {
         val priceCol = header.indexOfFirst { it in PRICE_HEADERS }
         val dateCol = header.indexOfFirst { it in DATE_HEADERS }
         val unitCol = header.indexOfFirst { it in UNIT_HEADERS }
+        val categoryCol = header.indexOfFirst { it in CATEGORY_HEADERS }
 
         val seen = HashSet<String>()
         val products = mutableListOf<ImportedProduct>()
@@ -74,7 +77,8 @@ object ProductImport {
                     ?.coerceIn(0, 999_999_999) ?: 0,
                 lastCountAt = row.cell(dateCol)?.let { parseDate(it) },
                 emoji = guessEmoji(name),
-                unit = MeasureUnit.fromText(row.cell(unitCol))
+                unit = MeasureUnit.fromText(row.cell(unitCol)),
+                category = row.cell(categoryCol)?.replace(Regex("\\s+"), " ")?.take(40).orEmpty()
             )
         }
         return products

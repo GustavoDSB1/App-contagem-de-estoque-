@@ -64,13 +64,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.estoque.contagem.data.MeasureUnit
-import com.estoque.contagem.data.PhotoChange
 import com.estoque.contagem.data.Product
 import com.estoque.contagem.excel.StockReport
+import com.estoque.contagem.ui.ProductForm
 import com.estoque.contagem.ui.UiState
 import com.estoque.contagem.ui.components.CompanyLogoBox
+import com.estoque.contagem.ui.components.CategoryFilterRow
 import com.estoque.contagem.ui.components.ConfirmDialog
+import com.estoque.contagem.ui.components.matchesCategory
 import com.estoque.contagem.ui.components.rememberProductImage
 import com.estoque.contagem.ui.components.ProductAvatar
 import com.estoque.contagem.ui.components.ProductFormDialog
@@ -96,14 +97,7 @@ fun HomeScreen(
     snackbarHostState: SnackbarHostState,
     exporting: Boolean,
     onOpenProduct: (String) -> Unit,
-    onAddProduct: (
-        name: String,
-        emoji: String,
-        initialQuantity: Double,
-        priceCents: Long,
-        photo: PhotoChange,
-        unit: MeasureUnit
-    ) -> Boolean,
+    onAddProduct: (ProductForm) -> Boolean,
     onExport: () -> Unit,
     onImport: () -> Unit,
     onNewCount: () -> Unit
@@ -113,14 +107,23 @@ fun HomeScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var filterName by rememberSaveable { mutableStateOf(ProductFilter.ALL.name) }
     val filter = ProductFilter.valueOf(filterName)
+    var categoryFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    val categories = remember(state.products) { StockReport.categories(state.products) }
+    // Se a categoria escolhida deixou de existir, volta para "Todas"
+    if (categoryFilter != null && categoryFilter != "" && categories.none { it.equals(categoryFilter, true) }) {
+        categoryFilter = null
+    }
     // Guarda a posição da lista ao abrir um produto e voltar
     val listState = rememberLazyListState()
 
     val sorted = remember(state.products) { StockReport.sortByName(state.products) }
     val counts = remember(sorted) { ProductFilter.entries.associateWith { f -> sorted.count { f.matches(it) } } }
-    val filtered = remember(sorted, query, filter) {
+    val filtered = remember(sorted, query, filter, categoryFilter) {
         val q = query.trim().normalizedForSearch()
-        sorted.filter { filter.matches(it) && (q.isEmpty() || it.name.normalizedForSearch().contains(q)) }
+        sorted.filter {
+            filter.matches(it) && matchesCategory(it, categoryFilter) &&
+                (q.isEmpty() || it.name.normalizedForSearch().contains(q))
+        }
     }
 
     Scaffold(
@@ -163,6 +166,14 @@ fun HomeScreen(
                         selected = filter,
                         counts = counts,
                         onSelect = { filterName = it.name }
+                    )
+                    CategoryFilterRow(
+                        categories = categories,
+                        hasUncategorized = state.products.any { it.category.isBlank() },
+                        selected = categoryFilter,
+                        onSelect = { categoryFilter = it },
+                        selectedColor = Violet,
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
                     LazyColumn(
                         state = listState,
@@ -219,8 +230,9 @@ fun HomeScreen(
             title = "Novo produto",
             askInitialQuantity = true,
             onDismiss = { showNewProduct = false },
-            onSave = { name, emoji, qty, price, photo, unit ->
-                val ok = onAddProduct(name, emoji, qty, price, photo, unit)
+            categories = StockReport.categories(state.products),
+            onSave = { form ->
+                val ok = onAddProduct(form)
                 if (ok) showNewProduct = false
                 ok
             }
@@ -433,6 +445,17 @@ private fun ProductCard(product: Product, onClick: () -> Unit) {
             ProductAvatar(product = product, size = 56.dp)
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
+                if (product.category.isNotBlank()) {
+                    Text(
+                        product.category.uppercase(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = color,
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Text(
                     product.name,
                     fontSize = 17.sp,

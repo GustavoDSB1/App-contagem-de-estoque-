@@ -57,12 +57,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.estoque.contagem.consumo.Money
 import com.estoque.contagem.data.MeasureUnit
-import com.estoque.contagem.data.PhotoChange
 import com.estoque.contagem.data.Qty
 import com.estoque.contagem.data.Product
 import com.estoque.contagem.ui.components.ConfirmDialog
 import com.estoque.contagem.ui.components.ProductAvatar
 import com.estoque.contagem.ui.components.ProductFormDialog
+import com.estoque.contagem.ui.ProductForm
 import com.estoque.contagem.ui.formatQty
 import com.estoque.contagem.ui.formatWhen
 import com.estoque.contagem.ui.theme.DangerRed
@@ -79,7 +79,9 @@ fun ProductScreen(
     onBack: () -> Unit,
     onAdd: (Double) -> Unit,
     onSetTotal: (Double) -> Unit,
-    onEdit: (name: String, emoji: String, priceCents: Long, photo: PhotoChange, unit: MeasureUnit) -> Boolean,
+    onEdit: (ProductForm) -> Boolean,
+    /** Categorias já usadas (para sugerir na edição). */
+    categories: List<String> = emptyList(),
     onExcludeFromExcel: (Boolean) -> Unit,
     onDelete: () -> Unit
 ) {
@@ -384,10 +386,13 @@ fun ProductScreen(
             initialPriceCents = product.priceCents,
             initialImageFile = product.imageFile,
             initialUnit = product.unit,
+            initialCategory = product.category,
+            initialBarcode = product.barcode,
+            categories = categories,
             askInitialQuantity = false,
             onDismiss = { showEdit = false },
-            onSave = { name, emoji, _, price, photo, newUnit ->
-                val ok = onEdit(name, emoji, price, photo, newUnit)
+            onSave = { form ->
+                val ok = onEdit(form)
                 if (ok) showEdit = false
                 ok
             }

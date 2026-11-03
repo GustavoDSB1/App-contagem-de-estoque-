@@ -69,6 +69,28 @@ object StockReport {
         return products.sortedWith { a, b -> collator.compare(a.name, b.name) }
     }
 
+    /** Por categoria (sem categoria por último) e depois por nome. */
+    fun sortByCategoryAndName(products: List<Product>): List<Product> {
+        val collator = Collator.getInstance(BR).apply { strength = Collator.PRIMARY }
+        return products.sortedWith { a, b ->
+            val ca = a.category.trim()
+            val cb = b.category.trim()
+            when {
+                ca.isEmpty() && cb.isNotEmpty() -> 1
+                ca.isNotEmpty() && cb.isEmpty() -> -1
+                else -> collator.compare(ca, cb).takeIf { it != 0 } ?: collator.compare(a.name, b.name)
+            }
+        }
+    }
+
+    /** Categorias usadas nos produtos, em ordem alfabética. */
+    fun categories(products: List<Product>): List<String> {
+        val collator = Collator.getInstance(BR).apply { strength = Collator.PRIMARY }
+        return products.map { it.category.trim() }.filter { it.isNotEmpty() }
+            .distinctBy { it.lowercase(BR) }
+            .sortedWith { a, b -> collator.compare(a, b) }
+    }
+
     private fun dateTime(millis: Long): String =
         SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", BR).format(Date(millis))
 
@@ -93,6 +115,9 @@ object StockReport {
         generatedAt: Long,
         company: CompanyInfo
     ): Sheet {
+        val hasCategories = products.any { it.category.isNotBlank() }
+        val ordered = if (hasCategories) sortByCategoryAndName(products) else products
+        val lastCol = XlsxWriter.columnName(if (hasCategories) 5 else 4)
         val total = Qty.round(products.sumOf { it.quantity })
         val anyDecimal = products.any { it.unit.allowsDecimals || it.quantity != Math.rint(it.quantity) }
         val counted = products.count { it.wasCounted }
@@ -119,17 +144,20 @@ object StockReport {
         )
         val infoRows = rows.size
         rows += emptyList<Cell?>()
-        rows += listOf("#", "Produto", "Quantidade", "Unidade", "Última contagem").map { Cell.Text(it, CellStyle.HEADER) }
+        rows += (listOf("#", "Produto", "Quantidade", "Unidade") +
+            (if (hasCategories) listOf("Categoria") else emptyList()) +
+            listOf("Última contagem")).map { Cell.Text(it, CellStyle.HEADER) }
         val headerRow = rows.size // número da linha do cabeçalho da tabela
 
         val firstDataRow = rows.size + 1 // número da linha no Excel (começa em 1)
-        products.forEachIndexed { i, p ->
+        ordered.forEachIndexed { i, p ->
             val alt = i % 2 == 1
             rows += listOf(
                 Cell.Text("${i + 1}", if (alt) CellStyle.CENTER_ALT else CellStyle.CENTER),
                 Cell.Text(p.name, if (alt) CellStyle.TEXT_ALT else CellStyle.TEXT),
                 Cell.Number(p.quantity, numberStyle(p, alt)),
-                Cell.Text(p.unit.code, if (alt) CellStyle.CENTER_ALT else CellStyle.CENTER),
+                Cell.Text(p.unit.code, if (alt) CellStyle.CENTER_ALT else CellStyle.CENTER)
+            ) + (if (hasCategories) listOf(Cell.Text(p.category.trim(), if (alt) CellStyle.TEXT_ALT else CellStyle.TEXT)) else emptyList()) + listOf(
                 p.lastCountAt?.let { Cell.Text(shortDateTime(it), if (alt) CellStyle.CENTER_ALT else CellStyle.CENTER) }
                     ?: Cell.Text("Não contado", if (alt) CellStyle.WARN_ALT else CellStyle.WARN)
             )
@@ -147,16 +175,17 @@ object StockReport {
             ),
             Cell.Blank(CellStyle.TOTAL_LABEL),
             Cell.Blank(CellStyle.TOTAL_LABEL)
-        )
+        ) + (if (hasCategories) listOf(Cell.Blank(CellStyle.TOTAL_LABEL)) else emptyList())
 
         return Sheet(
             name = "Contagem",
-            columnWidths = listOf(6.0, 40.0, 14.0, 10.0, 22.0),
+            columnWidths = listOf(6.0, 40.0, 14.0, 10.0) + (if (hasCategories) listOf(20.0) else emptyList()) + listOf(22.0),
             rows = rows,
-            merges = (1..infoRows).map { "A$it:E$it" },
+            merges = (1..infoRows).map { "A$it:$lastCol$it" },
             rowHeights = mapOf(0 to 32.0, headerRow - 1 to 24.0),
             frozenRows = headerRow,
-            image = logoImage(company, column = 4, columnWidthChars = 22.0)
+            image = logoImage(company, column = if (hasCategories) 5 else 4, columnWidthChars = 22.0),
+            autoFilter = if (products.isEmpty()) null else "A$headerRow:$lastCol$lastDataRow"
         )
     }
 

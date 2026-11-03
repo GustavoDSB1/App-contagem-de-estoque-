@@ -49,6 +49,42 @@ class XlsxWriterTest {
     }
 
     @Test
+    fun categoriesGroupAndFilter() {
+        val products = listOf(
+            product("Sabão", 2).copy(category = "Limpeza"),
+            product("Coca", 5).copy(category = "Bebidas"),
+            product("Arroz", 10),
+            product("Água", 3).copy(category = "Bebidas")
+        )
+        assertEquals(listOf("Bebidas", "Limpeza"), StockReport.categories(products))
+        // Por categoria (sem categoria por último) e depois por nome
+        assertEquals(
+            listOf("Água", "Coca", "Sabão", "Arroz"),
+            StockReport.sortByCategoryAndName(products).map { it.name }
+        )
+
+        val out = ByteArrayOutputStream()
+        XlsxWriter.write(StockReport.build(products, 1_700_000_000_000L, 1_700_000_500_000L), out)
+        val count = unzip(out.toByteArray()).getValue("xl/worksheets/sheet1.xml")
+        assertTrue(count.contains(">Categoria<"))
+        assertTrue(count.indexOf("Água") < count.indexOf("Coca"))
+        assertTrue(count.indexOf("Coca") < count.indexOf("Sabão"))
+        assertTrue(count.indexOf("Sabão") < count.indexOf("Arroz"))
+        // Filtros do Excel no cabeçalho (6 colunas: A até F), linhas 6 a 10
+        assertTrue(count.contains("<autoFilter ref=\"A6:F10\"/>"))
+        assertTrue(count.contains("<f>SUM(C7:C10)</f><v>20</v>"))
+    }
+
+    @Test
+    fun noCategoryColumnWhenNoneIsUsed() {
+        val out = ByteArrayOutputStream()
+        XlsxWriter.write(StockReport.build(listOf(product("Arroz", 1)), 0L, 0L), out)
+        val count = unzip(out.toByteArray()).getValue("xl/worksheets/sheet1.xml")
+        assertTrue(!count.contains(">Categoria<"))
+        assertTrue(count.contains("<autoFilter ref=\"A6:E7\"/>"))
+    }
+
+    @Test
     fun numberTextHasNoScientificNotation() {
         assertEquals("12", XlsxWriter.numberText(12.0))
         assertEquals("2.5", XlsxWriter.numberText(2.5))

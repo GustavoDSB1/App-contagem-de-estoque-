@@ -163,7 +163,8 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
                     openProductId = null
                     notify("✏️ ${product.name} corrigido para ${formatQty(value)} ${product.unit.code}")
                 },
-                onEdit = { name, emoji, price, photo, unit -> vm.editProduct(product.id, name, emoji, price, photo, unit) },
+                onEdit = { form -> vm.editProduct(product.id, form) },
+                categories = com.estoque.contagem.excel.StockReport.categories(state.products),
                 onExcludeFromExcel = { excluded -> vm.setExcludedFromExcel(product.id, excluded) },
                 onDelete = {
                     vm.deleteProduct(product.id)
@@ -203,9 +204,9 @@ fun EstoqueApp(vm: StockViewModel = viewModel()) {
                             snackbarHostState = snackbar,
                             exporting = exporting,
                             onOpenProduct = { openProductId = it },
-                            onAddProduct = { name, emoji, qty, price, photo, unit ->
-                                val ok = vm.addProduct(name, emoji, qty, price, photo, unit)
-                                if (ok) notify("📦 $name cadastrado!")
+                            onAddProduct = { form ->
+                                val ok = vm.addProduct(form)
+                                if (ok) notify("📦 ${form.name} cadastrado!")
                                 ok
                             },
                             onExport = {

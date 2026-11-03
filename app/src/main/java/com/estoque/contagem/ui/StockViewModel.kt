@@ -123,18 +123,11 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
     fun isNameTaken(name: String, exceptId: String? = null) = nameTaken(name, exceptId)
 
     /** Retorna false se já existir um produto com o mesmo nome. */
-    fun addProduct(
-        name: String,
-        emoji: String,
-        initialQuantity: Double,
-        priceCents: Long,
-        photo: PhotoChange = PhotoChange.Keep,
-        unit: MeasureUnit = MeasureUnit.UN
-    ): Boolean {
-        val clean = name.trim()
+    fun addProduct(form: ProductForm): Boolean {
+        val clean = form.name.trim()
         if (clean.isEmpty() || nameTaken(clean)) return false
-        val initial = Qty.round(initialQuantity.coerceIn(0.0, Qty.MAX))
-        val imageFile = (photo as? PhotoChange.New)?.let { savePhoto(it) }
+        val initial = Qty.round(form.initialQuantity.coerceIn(0.0, Qty.MAX))
+        val imageFile = (form.photo as? PhotoChange.New)?.let { savePhoto(it) }
         val now = System.currentTimeMillis()
         val products = _state.value.products
         val nextColor = ((products.maxOfOrNull { it.colorIndex } ?: -1) + 1) % ProductColors.size
@@ -146,14 +139,16 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
         val product = Product(
             id = UUID.randomUUID().toString(),
             name = clean,
-            emoji = emoji,
+            emoji = form.emoji,
             colorIndex = nextColor,
             quantity = initial,
             entries = entries,
             createdAt = now,
-            priceCents = priceCents,
+            priceCents = form.priceCents,
             imageFile = imageFile,
-            unit = unit
+            unit = form.unit,
+            category = form.category.trim().take(40),
+            barcode = form.barcode.trim()
         )
         update { it.copy(products = it.products + product) }
         return true
@@ -178,15 +173,9 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun editProduct(
-        id: String,
-        name: String,
-        emoji: String,
-        priceCents: Long,
-        photo: PhotoChange,
-        unit: MeasureUnit
-    ): Boolean {
-        val clean = name.trim()
+    fun editProduct(id: String, form: ProductForm): Boolean {
+        val photo = form.photo
+        val clean = form.name.trim()
         if (clean.isEmpty() || nameTaken(clean, exceptId = id)) return false
         val oldImage = _state.value.products.firstOrNull { it.id == id }?.imageFile
         val newImage = when (photo) {
@@ -196,7 +185,15 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (newImage != oldImage) ProductImages.delete(getApplication(), oldImage)
         updateProduct(id) {
-            it.copy(name = clean, emoji = emoji, priceCents = priceCents, imageFile = newImage, unit = unit)
+            it.copy(
+                name = clean,
+                emoji = form.emoji,
+                priceCents = form.priceCents,
+                imageFile = newImage,
+                unit = form.unit,
+                category = form.category.trim().take(40),
+                barcode = form.barcode.trim()
+            )
         }
         return true
     }
@@ -291,7 +288,8 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                     entries = entries,
                     createdAt = now,
                     priceCents = item.priceCents,
-                    unit = item.unit
+                    unit = item.unit,
+                    category = item.category
                 )
             }
             added = newOnes.size
@@ -344,7 +342,7 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                         products = snapshot.products.map { p ->
                             BackupProduct(
                                 p.name, p.emoji, p.colorIndex, p.priceCents,
-                                ProductImages.readJpeg(app, p.imageFile), p.excludeFromExcel, p.unit
+                                ProductImages.readJpeg(app, p.imageFile), p.excludeFromExcel, p.unit, p.category
                             )
                         },
                         people = snapshot.people.map { BackupPerson(it.name, it.type) },
@@ -442,7 +440,8 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                             priceCents = b.priceCents,
                             imageFile = photo,
                             excludeFromExcel = b.excludeFromExcel,
-                            unit = b.unit
+                            unit = b.unit,
+                            category = b.category
                         )
                         added += p
                         byName[key] = p
@@ -453,6 +452,7 @@ class StockViewModel(app: Application) : AndroidViewModel(app) {
                         val usePhoto = current.imageFile == null && photo != null
                         if (!usePhoto && photo != null) unused += photo
                         updatedIds[current.id] = current.copy(
+                            category = current.category.ifBlank { b.category },
                             priceCents = if (b.priceCents > 0) b.priceCents else current.priceCents,
                             imageFile = if (usePhoto) photo else current.imageFile
                         )

@@ -30,7 +30,7 @@ class ProductImportTest {
             product("Coca 600", 18.0, countedAt),
             product("Sabão em pó & amaciante", 15.0, countedAt),
             product("Óleo de soja", 0.0, null, MeasureUnit.L),
-            product("Queijo", 2.5, countedAt, MeasureUnit.KG)
+            product("Queijo", 2.5, countedAt, MeasureUnit.KG).copy(category = "Frios")
         )
         val out = ByteArrayOutputStream()
         XlsxWriter.write(StockReport.build(original, countedAt, countedAt), out)
@@ -39,12 +39,15 @@ class ProductImportTest {
         assertEquals(listOf("Contagem", "Histórico"), sheets.keys.toList())
 
         val imported = ProductImport.parse(sheets)
-        assertEquals(listOf("Coca 600", "Óleo de soja", "Queijo", "Sabão em pó & amaciante"), imported.map { it.name })
-        assertEquals(listOf(18.0, 0.0, 2.5, 15.0), imported.map { it.quantity })
-        assertEquals(listOf(MeasureUnit.UN, MeasureUnit.L, MeasureUnit.KG, MeasureUnit.UN), imported.map { it.unit })
-        assertEquals(countedAt, imported[0].lastCountAt)
-        assertNull(imported[1].lastCountAt) // "Não contado"
-        assertEquals("🥤", imported[0].emoji)
+        // Com categoria em uso, a planilha agrupa por categoria (Frios primeiro, sem categoria depois)
+        assertEquals(listOf("Queijo", "Coca 600", "Óleo de soja", "Sabão em pó & amaciante"), imported.map { it.name })
+        assertEquals(listOf(2.5, 18.0, 0.0, 15.0), imported.map { it.quantity })
+        assertEquals(listOf(MeasureUnit.KG, MeasureUnit.UN, MeasureUnit.L, MeasureUnit.UN), imported.map { it.unit })
+        assertEquals(listOf("Frios", "", "", ""), imported.map { it.category })
+        assertEquals(countedAt, imported[1].lastCountAt)
+        assertNull(imported[2].lastCountAt) // "Não contado"
+        assertEquals("🧀", imported[0].emoji)
+        assertEquals("🥤", imported[1].emoji)
         assertEquals("🧼", imported[3].emoji)
         assertTrue(imported.none { it.name == "TOTAL" })
     }

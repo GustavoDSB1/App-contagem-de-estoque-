@@ -8,6 +8,8 @@ Aplicativo Android simples e visual para contar estoque e gerar uma planilha Exc
   em círculo automaticamente). Pode já informar a quantidade contada.
 - **Unidades de medida** por produto (unidade, kg, g, litros, ml, caixas, pacotes, fardos, dúzias, metros),
   com **casas decimais** onde faz sentido (ex.: 2,5 kg). A planilha tem a coluna Unidade.
+- **Categorias** (ex.: Bebidas, Limpeza): filtro na lista e no Consumo; na planilha os produtos saem
+  agrupados por categoria, com coluna própria e filtros do Excel no cabeçalho.
 - **Somar quantidades**: toque no produto, digite quanto contou e salve. Na próxima vez o valor é
   **somado** ao que já existe (ex.: 12 + 5 = 17). Botões rápidos `+1`, `+5`, `+10`, `+50`.
 - **Corrigir o total** caso tenha contado errado.

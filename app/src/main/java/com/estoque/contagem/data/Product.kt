@@ -22,7 +22,11 @@ data class Product(
     val imageFile: String? = null,
     /** Na lista de exclusão: continua no app, mas não vai para a planilha Excel de contagem. */
     val excludeFromExcel: Boolean = false,
-    val unit: MeasureUnit = MeasureUnit.UN
+    val unit: MeasureUnit = MeasureUnit.UN,
+    /** Categoria livre (ex.: "Bebidas"); vazio = sem categoria. */
+    val category: String = "",
+    /** Código de barras (EAN etc.), opcional. */
+    val barcode: String = ""
 ) {
     val wasCounted: Boolean get() = entries.isNotEmpty()
     val lastCountAt: Long? get() = entries.lastOrNull()?.timestamp

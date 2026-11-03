@@ -13,7 +13,8 @@ data class BackupProduct(
     /** Foto em JPEG (opcional). */
     val photoJpeg: ByteArray? = null,
     val excludeFromExcel: Boolean = false,
-    val unit: MeasureUnit = MeasureUnit.UN
+    val unit: MeasureUnit = MeasureUnit.UN,
+    val category: String = ""
 )
 
 data class BackupPerson(val name: String, val type: PersonType)
@@ -56,6 +57,7 @@ object BackupFormat {
                     .put("foto", p.photoJpeg?.let { Base64.getEncoder().encodeToString(it) } ?: JSONObject.NULL)
                     .put("foraDaPlanilha", p.excludeFromExcel)
                     .put("unidade", p.unit.code)
+                    .put("categoria", p.category)
             )
         }
         val people = JSONArray()
@@ -101,7 +103,8 @@ object BackupFormat {
                 photoJpeg = if (o.isNull("foto")) null
                 else runCatching { Base64.getDecoder().decode(o.getString("foto")) }.getOrNull(),
                 excludeFromExcel = o.optBoolean("foraDaPlanilha", false),
-                unit = MeasureUnit.fromText(o.optString("unidade"))
+                unit = MeasureUnit.fromText(o.optString("unidade")),
+                category = o.optString("categoria").trim().take(40)
             )
         }
         val peopleArr = json.optJSONArray("pessoas") ?: JSONArray()

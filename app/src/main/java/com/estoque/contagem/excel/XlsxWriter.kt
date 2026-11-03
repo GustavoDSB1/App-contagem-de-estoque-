@@ -77,7 +77,9 @@ data class Sheet(
     val rowHeights: Map<Int, Double> = emptyMap(),
     /** Quantidade de linhas fixas no topo ao rolar. */
     val frozenRows: Int = 0,
-    val image: SheetImage? = null
+    val image: SheetImage? = null,
+    /** Faixa com filtros do Excel no cabeçalho (ex.: "A6:F20"). */
+    val autoFilter: String? = null
 )
 
 /**
@@ -290,6 +292,7 @@ object XlsxWriter {
             append("</row>")
         }
         append("</sheetData>")
+        sheet.autoFilter?.let { append("<autoFilter ref=\"$it\"/>") }
         if (sheet.merges.isNotEmpty()) {
             append("<mergeCells count=\"${sheet.merges.size}\">")
             sheet.merges.forEach { append("<mergeCell ref=\"$it\"/>") }

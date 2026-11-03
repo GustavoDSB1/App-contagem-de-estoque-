@@ -80,7 +80,9 @@ import com.estoque.contagem.data.Product
 import com.estoque.contagem.excel.StockReport
 import com.estoque.contagem.ui.UiState
 import com.estoque.contagem.ui.normalizedForSearch
+import com.estoque.contagem.ui.components.CategoryFilterRow
 import com.estoque.contagem.ui.components.ConfirmDialog
+import com.estoque.contagem.ui.components.matchesCategory
 import com.estoque.contagem.ui.components.MoneyField
 import com.estoque.contagem.ui.components.PersonFormDialog
 import com.estoque.contagem.ui.components.ProductAvatar
@@ -116,9 +118,16 @@ fun ConsumptionScreen(
     val products = remember(state.products) { StockReport.sortByName(state.products) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf("") }
-    val shownProducts = remember(products, search) {
+    var categoryFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    val categories = remember(state.products) { StockReport.categories(state.products) }
+    if (categoryFilter != null && categoryFilter != "" && categories.none { it.equals(categoryFilter, true) }) {
+        categoryFilter = null
+    }
+    val shownProducts = remember(products, search, categoryFilter) {
         val q = search.trim().normalizedForSearch()
-        if (q.isEmpty()) products else products.filter { it.name.normalizedForSearch().contains(q) }
+        products.filter {
+            matchesCategory(it, categoryFilter) && (q.isEmpty() || it.name.normalizedForSearch().contains(q))
+        }
     }
     val dayEntries = remember(state.consumptions, day, type) {
         state.consumptions.filter { it.dayMillis == day && it.personType == type }.sortedBy { it.timestamp }
@@ -184,21 +193,34 @@ fun ConsumptionScreen(
                         }
                     }
                 }
+                if (categories.isNotEmpty()) {
+                    fullWidth {
+                        CategoryFilterRow(
+                            categories = categories,
+                            hasUncategorized = products.any { it.category.isBlank() },
+                            selected = categoryFilter,
+                            onSelect = { categoryFilter = it },
+                            selectedColor = ConsumoOrange,
+                            sidePadding = 0.dp
+                        )
+                    }
+                }
                 if (searchOpen) {
                     fullWidth {
                         ProductSearchField(query = search, onQueryChange = { search = it })
                     }
-                    if (shownProducts.isEmpty()) {
-                        fullWidth {
-                            Text(
-                                "Nenhum produto encontrado para \"$search\"",
-                                color = TextSecondary,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp)
-                            )
-                        }
+                }
+                if (products.isNotEmpty() && shownProducts.isEmpty()) {
+                    fullWidth {
+                        Text(
+                            if (search.isNotBlank()) "Nenhum produto encontrado para \"$search\""
+                            else "Nenhum produto nesta categoria",
+                            color = TextSecondary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        )
                     }
                 }
                 if (products.isEmpty()) {

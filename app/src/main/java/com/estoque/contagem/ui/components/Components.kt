@@ -60,6 +60,7 @@ import com.estoque.contagem.consumo.Money
 import com.estoque.contagem.data.MeasureUnit
 import com.estoque.contagem.data.PersonType
 import com.estoque.contagem.data.Qty
+import com.estoque.contagem.ui.ProductForm
 import com.estoque.contagem.data.PhotoChange
 import com.estoque.contagem.data.Product
 import com.estoque.contagem.data.ProductImages
@@ -134,6 +135,38 @@ fun StatusPill(text: String, background: Color, content: Color) {
             .background(background)
             .padding(horizontal = 10.dp, vertical = 4.dp)
     )
+}
+
+/** Categoria: digita uma nova ou toca numa já usada. */
+@Composable
+fun CategoryField(category: String, categories: List<String>, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = category,
+        onValueChange = { onChange(it.take(40)) },
+        label = { Text("Categoria (opcional)") },
+        placeholder = { Text("Ex.: Bebidas, Limpeza") },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.Sentences,
+            imeAction = ImeAction.Next
+        ),
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    )
+    val typed = category.trim()
+    val suggestions = categories.filter { !it.equals(typed, ignoreCase = true) && it.contains(typed, ignoreCase = true) }
+    if (suggestions.isNotEmpty()) {
+        Spacer(Modifier.height(6.dp))
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(suggestions.size) { i ->
+                androidx.compose.material3.AssistChip(
+                    onClick = { onChange(suggestions[i]) },
+                    label = { Text(suggestions[i]) },
+                    shape = RoundedCornerShape(50)
+                )
+            }
+        }
+    }
 }
 
 /** Escolha da unidade de medida (un, kg, L, cx...). */
@@ -223,18 +256,17 @@ fun ProductFormDialog(
     initialPriceCents: Long = 0,
     initialImageFile: String? = null,
     initialUnit: MeasureUnit = MeasureUnit.UN,
+    initialCategory: String = "",
+    initialBarcode: String = "",
+    /** Categorias já usadas, para escolher com um toque. */
+    categories: List<String> = emptyList(),
     askInitialQuantity: Boolean,
     onDismiss: () -> Unit,
-    onSave: (
-        name: String,
-        emoji: String,
-        initialQuantity: Double,
-        priceCents: Long,
-        photo: PhotoChange,
-        unit: MeasureUnit
-    ) -> Boolean
+    onSave: (ProductForm) -> Boolean
 ) {
     var unit by remember { mutableStateOf(initialUnit) }
+    var category by remember { mutableStateOf(initialCategory) }
+    var barcode by remember { mutableStateOf(initialBarcode) }
     var name by remember { mutableStateOf(initialName) }
     var emoji by remember { mutableStateOf(initialEmoji) }
     var quantity by remember { mutableStateOf("") }
@@ -323,6 +355,8 @@ fun ProductFormDialog(
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(Modifier.height(8.dp))
+                CategoryField(category = category, categories = categories, onChange = { category = it })
                 Spacer(Modifier.height(12.dp))
                 Text("Foto do produto", fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
@@ -416,7 +450,18 @@ fun ProductFormDialog(
             Button(
                 enabled = name.isNotBlank() && !processing,
                 onClick = {
-                    val ok = onSave(name.trim(), emoji, Qty.parse(quantity) ?: 0.0, priceCents, photo, unit)
+                    val ok = onSave(
+                        ProductForm(
+                            name = name.trim(),
+                            emoji = emoji,
+                            initialQuantity = Qty.parse(quantity) ?: 0.0,
+                            priceCents = priceCents,
+                            photo = photo,
+                            unit = unit,
+                            category = category.trim(),
+                            barcode = barcode.trim()
+                        )
+                    )
                     if (!ok) duplicate = true
                 },
                 shape = RoundedCornerShape(12.dp)
@@ -495,4 +540,51 @@ fun PersonFormDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
+}
+
+/**
+ * Filtro por categoria: "Todas", cada categoria e "Sem categoria".
+ * [selected] null = todas; "" = sem categoria.
+ */
+@Composable
+fun CategoryFilterRow(
+    categories: List<String>,
+    hasUncategorized: Boolean,
+    selected: String?,
+    onSelect: (String?) -> Unit,
+    selectedColor: Color = MaterialTheme.colorScheme.primary,
+    modifier: Modifier = Modifier,
+    sidePadding: Dp = 16.dp
+) {
+    if (categories.isEmpty()) return
+    val options: List<Pair<String?, String>> = listOf<Pair<String?, String>>(null to "🗂️ Todas") +
+        categories.map { it to it } +
+        (if (hasUncategorized) listOf("" to "Sem categoria") else emptyList())
+    androidx.compose.foundation.lazy.LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = sidePadding),
+        modifier = modifier
+    ) {
+        items(options.size) { i ->
+            val (value, label) = options[i]
+            androidx.compose.material3.FilterChip(
+                selected = value == selected,
+                onClick = { onSelect(value) },
+                label = { Text(label, fontWeight = FontWeight.SemiBold) },
+                shape = RoundedCornerShape(50),
+                colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                    containerColor = Color.White,
+                    selectedContainerColor = selectedColor,
+                    selectedLabelColor = Color.White
+                )
+            )
+        }
+    }
+}
+
+/** Produto pertence ao filtro de categoria? (null = todas, "" = sem categoria) */
+fun matchesCategory(product: Product, selected: String?): Boolean = when (selected) {
+    null -> true
+    "" -> product.category.isBlank()
+    else -> product.category.trim().equals(selected, ignoreCase = true)
 }

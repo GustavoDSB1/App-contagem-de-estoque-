@@ -55,6 +55,8 @@ class ProductRepository(context: Context) {
                     .put("image", p.imageFile ?: JSONObject.NULL)
                     .put("excludeFromExcel", p.excludeFromExcel)
                     .put("unit", p.unit.code)
+                    .put("category", p.category)
+                    .put("barcode", p.barcode)
                     .put("entries", entries)
             )
         }
@@ -117,7 +119,9 @@ class ProductRepository(context: Context) {
                 priceCents = o.optLong("priceCents", 0),
                 imageFile = if (o.isNull("image")) null else o.optString("image").ifBlank { null },
                 excludeFromExcel = o.optBoolean("excludeFromExcel", false),
-                unit = MeasureUnit.fromText(o.optString("unit"))
+                unit = MeasureUnit.fromText(o.optString("unit")),
+                category = o.optString("category").trim(),
+                barcode = o.optString("barcode").trim()
             )
         }
         val consArr = json.optJSONArray("consumptions") ?: JSONArray()
