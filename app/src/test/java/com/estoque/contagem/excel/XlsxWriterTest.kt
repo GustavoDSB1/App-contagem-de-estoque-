@@ -50,10 +50,34 @@ class XlsxWriterTest {
         assertTrue(!files.getValue("xl/worksheets/sheet2.xml").contains("Coca"))
     }
 
+    /** PNG mínimo válido (RGBA transparente), montado só com java.util.zip (sem java.awt, que não existe no Android). */
     private fun tinyPng(width: Int, height: Int): ByteArray {
-        val img = java.awt.image.BufferedImage(width, height, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+        fun chunk(out: java.io.DataOutputStream, type: String, data: ByteArray) {
+            val crc = java.util.zip.CRC32().apply { update(type.toByteArray()); update(data) }
+            out.writeInt(data.size)
+            out.write(type.toByteArray())
+            out.write(data)
+            out.writeInt(crc.value.toInt())
+        }
+        val header = java.io.ByteArrayOutputStream().apply {
+            java.io.DataOutputStream(this).apply {
+                writeInt(width); writeInt(height)
+                write(byteArrayOf(8, 6, 0, 0, 0)) // 8 bits, RGBA
+            }
+        }.toByteArray()
+        val raw = ByteArray(height * (1 + width * 4)) // linhas com filtro 0 e pixels transparentes
+        val deflater = java.util.zip.Deflater().apply { setInput(raw); finish() }
+        val compressed = java.io.ByteArrayOutputStream().apply {
+            val buf = ByteArray(4096)
+            while (!deflater.finished()) write(buf, 0, deflater.deflate(buf))
+        }.toByteArray()
         val out = ByteArrayOutputStream()
-        javax.imageio.ImageIO.write(img, "png", out)
+        java.io.DataOutputStream(out).apply {
+            write(byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 13, 10, 26, 10))
+            chunk(this, "IHDR", header)
+            chunk(this, "IDAT", compressed)
+            chunk(this, "IEND", ByteArray(0))
+        }
         return out.toByteArray()
     }
 
