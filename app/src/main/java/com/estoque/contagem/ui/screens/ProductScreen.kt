@@ -56,9 +56,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.estoque.contagem.consumo.Money
+import com.estoque.contagem.data.Calc
 import com.estoque.contagem.data.MeasureUnit
 import com.estoque.contagem.data.Qty
 import com.estoque.contagem.data.Product
+import com.estoque.contagem.ui.components.CalculatorDisplay
+import com.estoque.contagem.ui.components.CalculatorPad
 import com.estoque.contagem.ui.components.ConfirmDialog
 import com.estoque.contagem.ui.components.ProductAvatar
 import com.estoque.contagem.ui.components.ProductFormDialog
@@ -93,7 +96,17 @@ fun ProductScreen(
     var showDelete by rememberSaveable { mutableStateOf(false) }
     var showEdit by rememberSaveable { mutableStateOf(false) }
     val unit = product.unit
-    val value = Qty.parse(input)
+    // A quantidade pode ser uma conta: "7×12+5" = 89
+    val raw = Calc.evaluate(input)
+    val inputError = when {
+        input.isEmpty() -> null
+        raw == null -> "Conta inválida"
+        raw < 0 -> "O resultado não pode ser negativo"
+        !unit.allowsDecimals && raw != Math.rint(raw) -> "Deu ${formatQty(raw)}: ${unit.plural} só aceita número inteiro"
+        raw > Qty.MAX -> "Número grande demais"
+        else -> null
+    }
+    val value = if (inputError == null) raw else null
     val canSave = if (correcting) value != null else (value ?: 0.0) > 0.0
     val save = {
         if (canSave && value != null) {
@@ -236,50 +249,44 @@ fun ProductScreen(
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold
                 )
-                Spacer(Modifier.height(10.dp))
-
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = { input = Qty.cleanInput(it, unit.allowsDecimals) },
-                    placeholder = {
-                        Text("0", fontSize = 40.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-                    },
-                    singleLine = true,
-                    textStyle = TextStyle(fontSize = 40.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = if (unit.allowsDecimals) KeyboardType.Decimal else KeyboardType.Number,
-                        imeAction = ImeAction.Done
-                    ),
-                    suffix = { Text(unit.code, fontSize = 20.sp, color = TextSecondary) },
-                    keyboardActions = KeyboardActions(onDone = { save() }),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = color,
-                        cursorColor = color,
-                        unfocusedContainerColor = CardColor,
-                        focusedContainerColor = CardColor
-                    ),
-                    modifier = Modifier.fillMaxWidth()
+                Text(
+                    "Dá para fazer conta, ex.: 7 × 12 + 5",
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                CalculatorDisplay(
+                    expression = input,
+                    result = raw,
+                    unitCode = unit.code,
+                    error = inputError,
+                    color = color,
+                    onClear = { input = "" }
                 )
 
-                Spacer(Modifier.height(12.dp))
-                // Botões rápidos
+                Spacer(Modifier.height(10.dp))
+                // Botões rápidos: somam na conta
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     val steps = if (unit.allowsDecimals) listOf(0.5, 1.0, 5.0, 10.0) else listOf(1.0, 5.0, 10.0, 50.0)
                     steps.forEach { n ->
                         OutlinedButton(
-                            onClick = {
-                                val next = Qty.round(((Qty.parse(input) ?: 0.0) + n).coerceAtMost(Qty.MAX))
-                                input = Qty.toInput(next)
-                            },
+                            onClick = { input = Calc.addQuick(input, n) },
                             shape = RoundedCornerShape(14.dp),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp)
+                                .height(44.dp)
                         ) { Text("+${formatQty(n)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = color) }
                     }
                 }
+
+                Spacer(Modifier.height(10.dp))
+                CalculatorPad(
+                    allowsDecimals = unit.allowsDecimals,
+                    color = color,
+                    onKey = { input = Calc.press(input, it, unit.allowsDecimals) },
+                    onBackspace = { input = input.dropLast(1) }
+                )
 
                 // Prévia do resultado
                 if (value != null && canSave) {

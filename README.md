@@ -13,6 +13,8 @@ Aplicativo Android simples e visual para contar estoque e gerar uma planilha Exc
 - **Código de barras**: leitura pela câmera (leitor do Google, sem pedir permissão de câmera). No Estoque
   abre o produto para contar (ou oferece cadastrar um novo com o código); no Consumo abre a baixa.
   A busca também encontra pelo código; planilha, importação e backup levam o código.
+- **Calculadora na contagem**: digite a conta direto (ex.: `7 × 12 + 5` = 89) com + − × ÷; o app
+  mostra o resultado e soma ao estoque.
 - **Somar quantidades**: toque no produto, digite quanto contou e salve. Na próxima vez o valor é
   **somado** ao que já existe (ex.: 12 + 5 = 17). Botões rápidos `+1`, `+5`, `+10`, `+50`.
 - **Corrigir o total** caso tenha contado errado.
