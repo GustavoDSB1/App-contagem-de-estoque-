@@ -16,8 +16,9 @@ Aplicativo Android simples e visual para contar estoque e gerar uma planilha Exc
 - **Calculadora na contagem**: digite a conta direto (ex.: `7 × 12 + 5` = 89) com + − × ÷; o app
   mostra o resultado e soma ao estoque.
 - **Contar por foto** (📷 na tela do produto): foto de cima do engradado ou das latas, toque numa
-  tampinha, o app marca as parecidas e conta; toque para adicionar/remover marcas; o total vai para
-  a calculadora. Funciona sem internet.
+  tampinha (e, se a foto for inclinada, numa do fundo), o app marca as parecidas e conta. Opções:
+  só a cor da tampinha tocada (uma marca por vez), só uma área da foto, e zoom com dois dedos para
+  conferir; toque para adicionar/remover marcas; o total vai para a calculadora. Funciona sem internet.
 - **Somar quantidades**: toque no produto, digite quanto contou e salve. Na próxima vez o valor é
   **somado** ao que já existe (ex.: 12 + 5 = 17). Botões rápidos `+1`, `+5`, `+10`, `+50`.
 - **Corrigir o total** caso tenha contado errado.
@@ -124,7 +125,8 @@ app/src/main/java/com/estoque/contagem/
 │   ├── Company.kt               # Dados da empresa (nome, CNPJ, logo)
 │   ├── MeasureUnit.kt           # Unidades de medida e quantidades decimais
 │   ├── Calc.kt                  # Calculadora da contagem (7 × 12 + 5)
-│   ├── CircleCounter.kt         # Contagem por foto (círculos: tampinhas, latas)
+│   ├── CircleCounter.kt         # Contagem por foto (círculos, perspectiva)
+│   ├── ColorMatch.kt            # Filtro pela cor da tampinha
 │   ├── Backup.kt                # Formato do arquivo de backup
 │   ├── ProductImages.kt         # Fotos dos produtos (recorte, tamanho, cache)
 │   └── ProductRepository.kt     # Salva/carrega os dados (JSON no celular)

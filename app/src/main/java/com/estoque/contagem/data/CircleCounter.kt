@@ -5,8 +5,41 @@ import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-/** Ponto marcado na foto (coordenadas da imagem analisada). */
-data class CountMark(val x: Float, val y: Float)
+/** Ponto marcado na foto (coordenadas da imagem analisada) e o raio do objeto ali. */
+data class CountMark(val x: Float, val y: Float, val r: Float = 0f)
+
+/**
+ * Tamanho esperado do objeto conforme a altura na foto. Com a foto inclinada,
+ * o que está na frente (embaixo) aparece maior que o do fundo (em cima).
+ * Com uma amostra só, o tamanho é o mesmo na foto toda.
+ */
+class RadiusModel private constructor(
+    private val y1: Float,
+    private val r1: Float,
+    private val y2: Float,
+    private val r2: Float
+) {
+    val min: Float = minOf(r1, r2) * 0.6f
+    val max: Float = maxOf(r1, r2) * 1.5f
+
+    fun at(y: Float): Float {
+        if (y1 == y2) return (r1 + r2) / 2
+        val r = r1 + (r2 - r1) * (y - y1) / (y2 - y1)
+        return r.coerceIn(min, max)
+    }
+
+    companion object {
+        fun constant(r: Float) = RadiusModel(0f, r, 0f, r)
+
+        /** A partir de 1 ou 2 tampinhas tocadas (posição e raio de cada uma). */
+        fun fromSamples(samples: List<CountMark>): RadiusModel = when {
+            samples.isEmpty() -> constant(10f)
+            samples.size == 1 || kotlin.math.abs(samples[0].y - samples[1].y) < 5f ->
+                constant(samples.map { it.r }.average().toFloat())
+            else -> RadiusModel(samples[0].y, samples[0].r, samples[1].y, samples[1].r)
+        }
+    }
+}
 
 /**
  * Conta objetos redondos de tamanho parecido numa foto (tampinhas no engradado,
@@ -22,9 +55,23 @@ object CircleCounter {
      * @param radius raio aproximado de UM objeto, em pixels desta imagem
      * @param sensitivity 0..1: maior encontra mais círculos (e mais erros)
      */
-    fun detect(gray: IntArray, w: Int, h: Int, radius: Float, sensitivity: Float = 0.5f): List<CountMark> {
+    fun detect(gray: IntArray, w: Int, h: Int, radius: Float, sensitivity: Float = 0.5f): List<CountMark> =
+        detect(gray, w, h, RadiusModel.constant(radius), sensitivity, null)
+
+    /**
+     * @param model tamanho esperado conforme a altura na foto (perspectiva)
+     * @param accept filtro extra para cada centro encontrado (cor da tampinha, área escolhida)
+     */
+    fun detect(
+        gray: IntArray,
+        w: Int,
+        h: Int,
+        model: RadiusModel,
+        sensitivity: Float = 0.5f,
+        accept: ((x: Int, y: Int) -> Boolean)? = null
+    ): List<CountMark> {
         require(gray.size == w * h) { "tamanho da imagem não confere" }
-        if (radius < 3f || w < 8 || h < 8) return emptyList()
+        if (model.max < 3f || w < 8 || h < 8) return emptyList()
 
         val img = blur(blur(gray, w, h), w, h)
 
@@ -47,9 +94,11 @@ object CircleCounter {
         }
         val edgeThreshold = maxOf(40f, percentile(mag, 0.80f))
 
-        // Votação: cada borda vota no centro a "raio" de distância, na direção do gradiente
-        val rMin = maxOf(2f, radius * 0.8f)
-        val rMax = radius * 1.2f
+        // Votação: cada borda vota no centro a "raio" de distância, na direção do gradiente.
+        // Só vale o voto se o raio combina com o tamanho esperado naquela altura da foto.
+        val rMin = maxOf(2f, model.min * 0.8f)
+        val rMax = model.max * 1.2f
+        val expected = FloatArray(h) { model.at(it.toFloat()) }
         val votes = FloatArray(w * h)
         for (i in mag.indices) {
             val m = mag[i]
@@ -63,24 +112,31 @@ object CircleCounter {
                 for (sign in intArrayOf(1, -1)) {
                     val cx = (x + sign * dx * r).roundToInt()
                     val cy = (y + sign * dy * r).roundToInt()
-                    if (cx in 0 until w && cy in 0 until h) votes[cy * w + cx] += 1f
+                    if (cx in 0 until w && cy in 0 until h && kotlin.math.abs(r - expected[cy]) <= expected[cy] * 0.2f) {
+                        votes[cy * w + cx] += 1f
+                    }
                 }
                 r += 1f
             }
         }
 
-        // Junta votos vizinhos (janela 5×5) para tolerar arredondamentos
+        // Junta votos vizinhos (janela 5×5) e divide pelo perímetro esperado:
+        // assim tampinha pequena (fundo) e grande (frente) têm a mesma nota.
         val acc = boxSum(votes, w, h, 2)
+        for (y in 0 until h) {
+            val circumference = (2 * PI * expected[y]).toFloat()
+            for (x in 0 until w) acc[y * w + x] /= circumference
+        }
 
         // Picos: máximos locais acima do limite
-        val circumference = (2 * PI * radius).toFloat()
         var maxPeak = 0f
         for (v in acc) if (v > maxPeak) maxPeak = v
         val s = sensitivity.coerceIn(0.05f, 0.95f)
-        val threshold = maxOf(circumference * (1.1f - s), maxPeak * (0.75f - s * 0.5f))
-        val border = (radius * 0.5f).toInt()
+        val threshold = maxOf(1.1f - s, maxPeak * (0.75f - s * 0.5f))
         val candidates = mutableListOf<Triple<Int, Int, Float>>()
-        for (y in border until h - border) {
+        for (y in 0 until h) {
+            val border = (expected[y] * 0.5f).toInt()
+            if (y < border || y >= h - border) continue
             for (x in border until w - border) {
                 val v = acc[y * w + x]
                 if (v < threshold) continue
@@ -91,15 +147,17 @@ object CircleCounter {
                         if (acc[yy * w + xx] > v) { isMax = false; break@loop }
                     }
                 }
-                if (isMax) candidates += Triple(x, y, v)
+                if (isMax && (accept == null || accept(x, y))) candidates += Triple(x, y, v)
             }
         }
 
         // Um centro por objeto: descarta picos muito próximos de outro mais forte
-        val minDist = radius * 1.3f
         val accepted = mutableListOf<CountMark>()
         for ((x, y, _) in candidates.sortedByDescending { it.third }) {
-            if (accepted.none { hypot(it.x - x, it.y - y) < minDist }) accepted += CountMark(x.toFloat(), y.toFloat())
+            val minDist = expected[y] * 1.3f
+            if (accepted.none { hypot(it.x - x, it.y - y) < minDist }) {
+                accepted += CountMark(x.toFloat(), y.toFloat(), expected[y])
+            }
         }
         return accepted
     }

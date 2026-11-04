@@ -113,6 +113,124 @@ class CircleCounterTest {
         }
     }
 
+    // ---------- Ajustes: perspectiva, cor e área ----------
+
+    private class Cap(val x: Int, val y: Int, val r: Int, val rgb: Int)
+
+    /** Foto colorida sintética: fundo escuro + tampinhas coloridas + ruído. */
+    private fun colorPhoto(w: Int, h: Int, caps: List<Cap>, seed: Int = 1): IntArray {
+        val rnd = Random(seed)
+        return IntArray(w * h) { i ->
+            val x = i % w
+            val y = i / w
+            var c = 0x3A3A3A
+            for (cap in caps) if (hypot((x - cap.x).toDouble(), (y - cap.y).toDouble()) <= cap.r) c = cap.rgb
+            val n = rnd.nextInt(-10, 11)
+            val r = ((c shr 16 and 0xFF) + n).coerceIn(0, 255)
+            val g = ((c shr 8 and 0xFF) + n).coerceIn(0, 255)
+            val b = ((c and 0xFF) + n).coerceIn(0, 255)
+            (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+        }
+    }
+
+    private fun gray(argb: IntArray) = IntArray(argb.size) {
+        val c = argb[it]
+        ((c shr 16 and 0xFF) * 299 + (c shr 8 and 0xFF) * 587 + (c and 0xFF) * 114) / 1000
+    }
+
+    private val GOLD = 0xC8A03C
+    private val WHITE = 0xEDEDE6
+    private val GREEN_GLASS = 0x2E6B32
+
+    @Test
+    fun perspectiveFrontBigBackSmall() {
+        // Foto inclinada: no fundo (em cima) raio 8, na frente (embaixo) raio 20
+        val w = 320
+        val h = 300
+        val caps = mutableListOf<Cap>()
+        var y = 25
+        while (y < 285) {
+            val r = (8 + (y - 25) * 12 / 255)
+            var x = 15 + r
+            while (x < w - r - 5) {
+                caps += Cap(x, y, r, WHITE)
+                x += r * 2 + 6
+            }
+            y += r * 2 + 8
+        }
+        val argb = colorPhoto(w, h, caps)
+        val back = caps.first()
+        val front = caps.last()
+        val model = RadiusModel.fromSamples(
+            listOf(CountMark(front.x.toFloat(), front.y.toFloat(), front.r.toFloat()), CountMark(back.x.toFloat(), back.y.toFloat(), back.r.toFloat()))
+        )
+        val marks = CircleCounter.detect(gray(argb), w, h, model)
+        assertEquals(caps.size, marks.size)
+
+        // Só com o tamanho da tampinha da frente, as do fundo se perdem
+        val oneSize = CircleCounter.detect(gray(argb), w, h, front.r.toFloat())
+        assertTrue(oneSize.size < caps.size)
+    }
+
+    @Test
+    fun colorFilterCountsOnlyOneBrand() {
+        // 8 douradas + 6 brancas + 4 "fundos de garrafa" verdes (vidro), todos do mesmo tamanho
+        val w = 340
+        val h = 200
+        val caps = mutableListOf<Cap>()
+        for (i in 0 until 8) caps += Cap(25 + i * 40, 30, 14, GOLD)
+        for (i in 0 until 6) caps += Cap(25 + i * 40, 90, 14, WHITE)
+        for (i in 0 until 4) caps += Cap(25 + i * 40, 150, 14, GREEN_GLASS)
+        val argb = colorPhoto(w, h, caps)
+        val g = gray(argb)
+        val model = RadiusModel.constant(14f)
+
+        // Sem filtro, conta pelo menos todas as douradas e brancas (o vidro verde tem pouco contraste)
+        assertTrue(CircleCounter.detect(g, w, h, model).size >= 14)
+
+        // Tocou numa dourada: só as douradas
+        val gold = ColorMatch.meanColor(argb, w, h, 25f, 30f, 14f)
+        val onlyGold = CircleCounter.detect(g, w, h, model, accept = { x, y ->
+            ColorMatch.similar(gold, ColorMatch.meanColor(argb, w, h, x.toFloat(), y.toFloat(), 14f))
+        })
+        assertEquals(8, onlyGold.size)
+        assertTrue(onlyGold.all { it.y < 50 })
+
+        // Tocou numa branca: só as brancas
+        val white = ColorMatch.meanColor(argb, w, h, 25f, 90f, 14f)
+        val onlyWhite = CircleCounter.detect(g, w, h, model, accept = { x, y ->
+            ColorMatch.similar(white, ColorMatch.meanColor(argb, w, h, x.toFloat(), y.toFloat(), 14f))
+        })
+        assertEquals(6, onlyWhite.size)
+    }
+
+    @Test
+    fun colorSimilarityIgnoresShadowButNotHue() {
+        val gold = ColorMatch.Rgb(200f, 160f, 60f)
+        val goldInShadow = ColorMatch.Rgb(130f, 104f, 40f)
+        assertTrue(ColorMatch.similar(gold, goldInShadow))
+        assertTrue(!ColorMatch.similar(gold, ColorMatch.Rgb(237f, 237f, 230f))) // branca
+        assertTrue(!ColorMatch.similar(gold, ColorMatch.Rgb(46f, 107f, 50f))) // vidro verde
+    }
+
+    @Test
+    fun areaFilterCountsOnlyInsideTheRectangle() {
+        val centers = grid(6, 4, 32, 40, 40)
+        val img = image(260, 180, centers, 14)
+        // Retângulo cobrindo só as 3 primeiras colunas
+        val marks = CircleCounter.detect(img, 260, 180, RadiusModel.constant(14f), accept = { x, _ -> x < 120 })
+        assertEquals(12, marks.size)
+    }
+
+    @Test
+    fun radiusModelInterpolatesAndClamps() {
+        val m = RadiusModel.fromSamples(listOf(CountMark(0f, 200f, 20f), CountMark(0f, 0f, 10f)))
+        assertEquals(15f, m.at(100f), 0.01f)
+        assertEquals(10f * 0.6f, m.at(-1000f), 0.01f) // não encolhe além do limite
+        assertEquals(20f * 1.5f, m.at(5000f), 0.01f) // nem cresce além
+        assertEquals(12f, RadiusModel.fromSamples(listOf(CountMark(5f, 5f, 12f))).at(999f), 0.01f)
+    }
+
     @Test
     fun emptyImageHasNoMarks() {
         assertEquals(0, CircleCounter.detect(image(100, 100, emptyList(), 10), 100, 100, 10f).size)
