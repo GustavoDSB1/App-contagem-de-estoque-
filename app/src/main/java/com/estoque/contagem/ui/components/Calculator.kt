@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -33,23 +34,28 @@ import com.estoque.contagem.ui.theme.CardColor
 import com.estoque.contagem.ui.theme.DangerRed
 import com.estoque.contagem.ui.theme.TextSecondary
 
-/** Visor da calculadora: a conta digitada e, embaixo, o resultado. */
+/**
+ * Visor compacto: a conta com o resultado ("7 × 12 + 5 = 89") e, embaixo,
+ * a prévia do total ou o aviso de erro.
+ */
 @Composable
 fun CalculatorDisplay(
     expression: String,
     result: Double?,
     unitCode: String,
     error: String?,
+    preview: String?,
+    previewColor: Color,
     color: Color,
     onClear: () -> Unit
 ) {
+    val hasOp = Calc.hasOperation(expression)
     Column(
-        horizontalAlignment = Alignment.End,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(CardColor)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(start = 6.dp, end = 14.dp, top = 6.dp, bottom = 8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text(
@@ -64,31 +70,46 @@ fun CalculatorDisplay(
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             )
             Spacer(Modifier.weight(1f))
+            val shown = when {
+                expression.isEmpty() -> "0"
+                hasOp && result != null && error == null -> "${Calc.pretty(expression)} = ${Qty.format(result)}"
+                else -> Calc.pretty(expression)
+            }
             Text(
-                if (expression.isEmpty()) "0" else Calc.pretty(expression),
-                fontSize = if (expression.length > 14) 26.sp else 38.sp,
+                shown,
+                fontSize = when {
+                    shown.length > 22 -> 20.sp
+                    shown.length > 14 -> 26.sp
+                    else -> 34.sp
+                },
                 fontWeight = FontWeight.Bold,
                 color = if (expression.isEmpty()) TextSecondary else MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.End,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                lineHeight = 40.sp,
-                modifier = Modifier.weight(4f, fill = false)
+                modifier = Modifier.weight(6f, fill = false)
             )
-            if (!Calc.hasOperation(expression)) {
-                Spacer(Modifier.width(6.dp))
-                Text(unitCode, fontSize = 18.sp, color = TextSecondary)
-            }
+            Spacer(Modifier.width(6.dp))
+            Text(unitCode, fontSize = 16.sp, color = TextSecondary)
         }
-        when {
-            error != null -> Text(error, color = DangerRed, fontSize = 13.sp, textAlign = TextAlign.End)
-            Calc.hasOperation(expression) && result != null -> Text(
-                "= ${Qty.format(result)} $unitCode",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = color
-            )
-        }
+        Text(
+            when {
+                error != null -> error
+                preview != null -> preview
+                else -> "Digite a quantidade ou faça a conta (ex.: 7 × 12 + 5)"
+            },
+            color = when {
+                error != null -> DangerRed
+                preview != null -> previewColor
+                else -> TextSecondary
+            },
+            fontSize = if (preview != null && error == null) 17.sp else 13.sp,
+            fontWeight = if (preview != null && error == null) FontWeight.ExtraBold else FontWeight.Normal,
+            textAlign = TextAlign.End,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -98,7 +119,9 @@ fun CalculatorPad(
     allowsDecimals: Boolean,
     color: Color,
     onKey: (Char) -> Unit,
-    onBackspace: () -> Unit
+    onBackspace: () -> Unit,
+    /** Com weight(1f), o teclado ocupa a altura que sobrar na tela. */
+    modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
     val rows = listOf(
@@ -107,9 +130,14 @@ fun CalculatorPad(
         listOf('1', '2', '3', Calc.MINUS),
         listOf(',', '0', '⌫', Calc.PLUS)
     )
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier) {
         rows.forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
                 row.forEach { key ->
                     val isOp = Calc.isOperator(key)
                     val enabled = key != ',' || allowsDecimals
@@ -117,8 +145,8 @@ fun CalculatorPad(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .weight(1f)
-                            .height(56.dp)
-                            .clip(RoundedCornerShape(16.dp))
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(14.dp))
                             .background(
                                 when {
                                     isOp -> color.copy(alpha = 0.15f)

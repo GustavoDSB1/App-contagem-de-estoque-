@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -28,6 +30,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -114,265 +118,147 @@ fun ProductScreen(
         }
     }
 
+    var showHistory by rememberSaveable { mutableStateOf(false) }
+    // Prévia do que vai acontecer: "12 + 89 = 101 un" ou "12 ➜ 89 un"
+    val preview = value?.takeIf { canSave }?.let { v ->
+        if (correcting) "${formatQty(product.quantity)} ➜ ${formatQty(v)} ${unit.code}"
+        else "${formatQty(product.quantity)} + ${formatQty(v)} = ${formatQty(product.quantity + v)} ${unit.code}"
+    }
+
+    // Tudo cabe numa tela só: o teclado ocupa o espaço que sobrar
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .imePadding()
     ) {
-        // Faixa atrás da barra de status, na cor do produto
-        Spacer(
-            Modifier
-                .fillMaxWidth()
-                .windowInsetsTopHeight(WindowInsets.statusBars)
-                .background(color)
-        )
+        // ----- Cabeçalho compacto -----
         Column(
             modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
+                .background(Brush.verticalGradient(listOf(color, lerp(color, Color.Black, 0.25f))))
+                .statusBarsPadding()
+                .padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 10.dp)
         ) {
-            // Cabeçalho colorido com o produto e a quantidade atual
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
-                    .background(Brush.verticalGradient(listOf(color, lerp(color, Color.Black, 0.25f))))
-                    .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 20.dp)
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = Color.White)
-                        }
-                        Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { showEdit = true }) {
-                            Icon(Icons.Filled.Edit, contentDescription = "Editar produto", tint = Color.White)
-                        }
-                        IconButton(onClick = { showDelete = true }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Excluir produto", tint = Color.White)
-                        }
-                    }
-                    ProductAvatar(product = product, size = 72.dp, onDark = true)
-                    Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = Color.White)
+                }
+                ProductAvatar(product = product, size = 44.dp, onDark = true)
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         product.name,
                         color = Color.White,
-                        fontSize = 22.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        if (product.priceCents > 0) "💲 ${Money.formatWithSymbol(product.priceCents)}  ✏️"
-                        else "💲 Definir valor",
+                        "Atual: ${formatQty(product.quantity)} ${unit.label(product.quantity)}",
                         color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier
-                            .padding(top = 2.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(Color.White.copy(alpha = if (product.priceCents > 0) 0.15f else 0.3f))
-                            .clickable { showEdit = true }
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1
                     )
-                    // Lista de exclusão da planilha Excel
-                    Text(
-                        if (product.excludeFromExcel) "🚫 Fora da planilha Excel" else "📊 Vai para a planilha Excel",
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier
-                            .padding(top = 6.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(
-                                if (product.excludeFromExcel) Color.Black.copy(alpha = 0.3f)
-                                else Color.White.copy(alpha = 0.15f)
-                            )
-                            .clickable { onExcludeFromExcel(!product.excludeFromExcel) }
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text("Quantidade atual", color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp)
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            formatQty(product.quantity),
-                            color = Color.White,
-                            fontSize = 52.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            lineHeight = 56.sp
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            unit.label(product.quantity),
-                            color = Color.White.copy(alpha = 0.85f),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                    }
+                }
+                IconButton(onClick = { showHistory = true }) {
+                    Text("🕘", fontSize = 20.sp)
+                }
+                IconButton(onClick = { showEdit = true }) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Editar produto", tint = Color.White)
+                }
+                IconButton(onClick = { showDelete = true }) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Excluir produto", tint = Color.White)
                 }
             }
-
-            Column(modifier = Modifier.padding(20.dp)) {
-                // Escolha: somar ou corrigir
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ModeOption(
-                        emoji = "➕",
-                        title = "Somar",
-                        subtitle = "Adicionar ao que já tem",
-                        selected = !correcting,
-                        color = color,
-                        modifier = Modifier.weight(1f),
-                        onClick = { correcting = false }
-                    )
-                    ModeOption(
-                        emoji = "✏️",
-                        title = "Corrigir",
-                        subtitle = "Trocar o total",
-                        selected = correcting,
-                        color = color,
-                        modifier = Modifier.weight(1f),
-                        onClick = { correcting = true }
-                    )
-                }
-
-                Spacer(Modifier.height(20.dp))
-                Text(
-                    when {
-                        correcting -> "Qual é a quantidade correta (em ${unit.plural})?"
-                        unit == MeasureUnit.UN -> "Quantas unidades você contou agora?"
-                        else -> "Quanto você contou agora (em ${unit.plural})?"
-                    },
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(start = 48.dp, top = 4.dp)
+            ) {
+                HeaderChip(
+                    if (product.priceCents > 0) "💲 ${Money.formatWithSymbol(product.priceCents)}" else "💲 Definir valor",
+                    strong = product.priceCents <= 0,
+                    onClick = { showEdit = true }
                 )
-                Text(
-                    "Dá para fazer conta, ex.: 7 × 12 + 5",
-                    fontSize = 13.sp,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                HeaderChip(
+                    if (product.excludeFromExcel) "🚫 Fora da planilha" else "📊 Na planilha",
+                    strong = product.excludeFromExcel,
+                    onClick = { onExcludeFromExcel(!product.excludeFromExcel) }
                 )
-                CalculatorDisplay(
-                    expression = input,
-                    result = raw,
-                    unitCode = unit.code,
-                    error = inputError,
-                    color = color,
-                    onClear = { input = "" }
-                )
-
-                Spacer(Modifier.height(10.dp))
-                // Botões rápidos: somam na conta
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    val steps = if (unit.allowsDecimals) listOf(0.5, 1.0, 5.0, 10.0) else listOf(1.0, 5.0, 10.0, 50.0)
-                    steps.forEach { n ->
-                        OutlinedButton(
-                            onClick = { input = Calc.addQuick(input, n) },
-                            shape = RoundedCornerShape(14.dp),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp)
-                        ) { Text("+${formatQty(n)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = color) }
-                    }
-                }
-
-                Spacer(Modifier.height(10.dp))
-                CalculatorPad(
-                    allowsDecimals = unit.allowsDecimals,
-                    color = color,
-                    onKey = { input = Calc.press(input, it, unit.allowsDecimals) },
-                    onBackspace = { input = input.dropLast(1) }
-                )
-
-                // Prévia do resultado
-                if (value != null && canSave) {
-                    Spacer(Modifier.height(16.dp))
-                    val preview = if (correcting) {
-                        "${formatQty(product.quantity)}  ➜  ${formatQty(value)} ${unit.code}"
-                    } else {
-                        "${formatQty(product.quantity)} + ${formatQty(value)} = ${formatQty(product.quantity + value)} ${unit.code}"
-                    }
-                    Text(
-                        preview,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (correcting) WarningText else SuccessText,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(if (correcting) WarningBg else SuccessBg)
-                            .padding(14.dp)
-                    )
-                }
-
-                Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = save,
-                    enabled = canSave,
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = color),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(60.dp)
-                ) {
-                    Text(
-                        if (correcting) "✅ Salvar novo total" else "✅ Somar e salvar",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(Modifier.height(28.dp))
-                Text("🕘 Lançamentos desta contagem", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                if (product.entries.isEmpty()) {
-                    Text("Nenhum lançamento ainda.", color = TextSecondary)
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(CardColor)
-                    ) {
-                        product.entries.asReversed().take(20).forEachIndexed { i, e ->
-                            if (i > 0) {
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .height(1.dp)
-                                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                                )
-                            }
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    if (e.isCorrection) "✏️ ${formatQty(e.amount)}" else "+${formatQty(e.amount)}",
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (e.isCorrection) WarningText else SuccessText,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(50))
-                                        .background(if (e.isCorrection) WarningBg else SuccessBg)
-                                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                                Spacer(Modifier.width(10.dp))
-                                Text("total ${formatQty(e.totalAfter)}", modifier = Modifier.weight(1f))
-                                Text(formatWhen(e.timestamp), color = TextSecondary, fontSize = 13.sp)
-                            }
-                        }
-                    }
-                }
-                Spacer(Modifier.navigationBarsPadding().height(16.dp))
             }
         }
+
+        // ----- Contagem: modo, visor, atalhos, teclado e salvar -----
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .weight(1f)
+                .navigationBarsPadding()
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            ModeToggle(correcting = correcting, color = color, onChange = { correcting = it })
+
+            CalculatorDisplay(
+                expression = input,
+                result = raw,
+                unitCode = unit.code,
+                error = inputError,
+                preview = preview,
+                previewColor = if (correcting) WarningText else SuccessText,
+                color = color,
+                onClear = { input = "" }
+            )
+
+            // Botões rápidos: somam na conta
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                val steps = if (unit.allowsDecimals) listOf(0.5, 1.0, 5.0, 10.0) else listOf(1.0, 5.0, 10.0, 50.0)
+                steps.forEach { n ->
+                    OutlinedButton(
+                        onClick = { input = Calc.addQuick(input, n) },
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp)
+                    ) { Text("+${formatQty(n)}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = color) }
+                }
+            }
+
+            CalculatorPad(
+                allowsDecimals = unit.allowsDecimals,
+                color = color,
+                onKey = { input = Calc.press(input, it, unit.allowsDecimals) },
+                onBackspace = { input = input.dropLast(1) },
+                modifier = Modifier.weight(1f)
+            )
+
+            Button(
+                onClick = save,
+                enabled = canSave,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = color),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+            ) {
+                Text(
+                    if (correcting) "✅ Salvar novo total" else "✅ Somar e salvar",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+
+    if (showHistory) {
+        AlertDialog(
+            onDismissRequest = { showHistory = false },
+            title = { Text("🕘 Lançamentos", fontWeight = FontWeight.Bold) },
+            text = { HistoryList(product) },
+            confirmButton = { TextButton(onClick = { showHistory = false }) { Text("Fechar") } }
+        )
     }
 
     if (showDelete) {
@@ -410,27 +296,96 @@ fun ProductScreen(
     }
 }
 
+/** Chave "Somar | Corrigir" (uma linha só). */
 @Composable
-private fun ModeOption(
-    emoji: String,
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    color: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(if (selected) color.copy(alpha = 0.12f) else CardColor)
-            .border(2.dp, if (selected) color else Color.Transparent, RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 14.dp, horizontal = 8.dp)
+private fun ModeToggle(correcting: Boolean, color: Color, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(42.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(CardColor)
+            .padding(4.dp)
     ) {
-        Text(emoji, fontSize = 26.sp)
-        Text(title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = if (selected) color else Color.Unspecified)
-        Text(subtitle, fontSize = 12.sp, color = TextSecondary, textAlign = TextAlign.Center)
+        listOf(false to "➕ Somar", true to "✏️ Corrigir total").forEach { (mode, label) ->
+            val selected = correcting == mode
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (selected) color else Color.Transparent)
+                    .clickable { onChange(mode) }
+            ) {
+                Text(
+                    label,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = if (selected) Color.White else TextSecondary
+                )
+            }
+        }
+    }
+}
+
+/** Etiqueta pequena e clicável no cabeçalho (valor, planilha). */
+@Composable
+private fun HeaderChip(text: String, strong: Boolean, onClick: () -> Unit) {
+    Text(
+        text,
+        color = Color.White,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (strong) Color.Black.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.18f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    )
+}
+
+/** Lançamentos desta contagem (mais recentes primeiro). */
+@Composable
+private fun HistoryList(product: Product) {
+    if (product.entries.isEmpty()) {
+        Text("Nenhum lançamento ainda.", color = TextSecondary)
+        return
+    }
+    Column(
+        modifier = Modifier
+            .heightIn(max = 420.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        product.entries.asReversed().take(50).forEachIndexed { i, e ->
+            if (i > 0) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (e.isCorrection) "✏️ ${formatQty(e.amount)}" else "+${formatQty(e.amount)}",
+                    fontWeight = FontWeight.Bold,
+                    color = if (e.isCorrection) WarningText else SuccessText,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(if (e.isCorrection) WarningBg else SuccessBg)
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text("total ${formatQty(e.totalAfter)}", modifier = Modifier.weight(1f))
+                Text(formatWhen(e.timestamp), color = TextSecondary, fontSize = 13.sp)
+            }
+        }
     }
 }
