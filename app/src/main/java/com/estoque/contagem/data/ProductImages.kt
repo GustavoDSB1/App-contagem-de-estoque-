@@ -164,6 +164,40 @@ object ProductImages {
         return name
     }
 
+    /** Foto inteira (sem recortar), com a rotação certa e no máximo [maxSide] px no lado maior. */
+    fun decodeScaled(context: Context, uri: Uri, maxSide: Int): Bitmap {
+        val decoded = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, info, _ ->
+                val largest = max(info.size.width, info.size.height)
+                decoder.setTargetSampleSize(max(1, largest / maxSide))
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        } else {
+            decodeLegacy(context, uri)
+        }
+        val largest = max(decoded.width, decoded.height)
+        if (largest <= maxSide) return decoded
+        val scale = maxSide.toFloat() / largest
+        return Bitmap.createScaledBitmap(
+            decoded,
+            (decoded.width * scale).toInt().coerceAtLeast(1),
+            (decoded.height * scale).toInt().coerceAtLeast(1),
+            true
+        )
+    }
+
+    /** Tons de cinza (0..255) da imagem, para a contagem automática. */
+    fun grayPixels(bitmap: Bitmap): IntArray {
+        val w = bitmap.width
+        val h = bitmap.height
+        val argb = IntArray(w * h)
+        bitmap.getPixels(argb, 0, w, 0, 0, w, h)
+        return IntArray(w * h) { i ->
+            val c = argb[i]
+            ((c shr 16 and 0xFF) * 299 + (c shr 8 and 0xFF) * 587 + (c and 0xFF) * 114) / 1000
+        }
+    }
+
     /** Arquivo temporário para a câmera salvar a foto. */
     fun cameraTempFile(context: Context): File =
         File(File(context.cacheDir, "camera").apply { mkdirs() }, "foto.jpg")

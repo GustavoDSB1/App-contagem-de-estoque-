@@ -120,6 +120,20 @@ fun ProductScreen(
     }
 
     var showHistory by rememberSaveable { mutableStateOf(false) }
+    var showPhotoCount by rememberSaveable { mutableStateOf(false) }
+
+    // Contar por foto (tampinhas, latas vistas de cima): o total vai para a calculadora
+    if (showPhotoCount) {
+        PhotoCountScreen(
+            color = color,
+            onClose = { showPhotoCount = false },
+            onResult = { n ->
+                input = Calc.addQuick(input, n.toDouble())
+                showPhotoCount = false
+            }
+        )
+        return
+    }
     // Prévia do que vai acontecer: "12 + 89 = 101 un" ou "12 ➜ 89 un"
     val preview = value?.takeIf { canSave }?.let { v ->
         if (correcting) "${formatQty(product.quantity)} ➜ ${formatQty(v)} ${unit.code}"
@@ -214,6 +228,14 @@ fun ProductScreen(
 
             // Botões rápidos: somam na conta
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = { showPhotoCount = true },
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                ) { Text("📷", fontSize = 18.sp) }
                 val steps = if (unit.allowsDecimals) listOf(0.5, 1.0, 5.0, 10.0) else listOf(1.0, 5.0, 10.0, 50.0)
                 steps.forEach { n ->
                     OutlinedButton(
